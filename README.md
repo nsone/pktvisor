@@ -6,12 +6,12 @@
 
 <p align="left">
   <strong>
-    <a href="#what-is-pktvisor">Introduction<a/>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
-    <a href="#get-started">Get Started<a/>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
-    <a href="#docs">Docs<a/>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
-    <a href="#build">Build<a/>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
-    <a href="#contribute">Contribute<a/>&nbsp;&nbsp;&bull;&nbsp;&nbsp;    
-    <a href="#contact-us">Contact Us<a/>
+    <a href="#what-is-pktvisor">Introduction</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
+    <a href="#get-started">Get Started</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
+    <a href="#docs">Docs</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
+    <a href="#build">Build</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
+    <a href="#contribute">Contribute</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
+    <a href="#contact-us">Contact Us</a>
   </strong>
 </p>
 
