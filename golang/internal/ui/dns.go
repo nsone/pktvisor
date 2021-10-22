@@ -84,11 +84,11 @@ func (u *ui) doDNSView() error {
 		v.Title = "Top REFUSED"
 	}
 
-	if v, err := u.gui.SetView("top_udp_ports", midCol4, row3Y, midCol4+tableWidth, row3Y+tableHeight); err != nil {
+	if v, err := u.gui.SetView("top_org_ids", midCol4, row3Y, midCol4+tableWidth, row3Y+tableHeight); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Top DNS UDP Ports"
+		v.Title = "Top Organization IDs"
 	}
 
 	return nil

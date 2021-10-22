@@ -12,7 +12,7 @@ type AppMetrics struct {
 	} `mapstructure:"app"`
 }
 
-// NameCount represents the count of a unique domain name
+// NameCount represents the count of a unique in name
 type NameCount struct {
 	Name     string `mapstructure:"name"`
 	Estimate int64  `mapstructure:"estimate"`
@@ -101,6 +101,7 @@ type DNSPayload struct {
 	TopREFUSED  []NameCount   `mapstructure:"top_refused"`
 	TopSRVFAIL  []NameCount   `mapstructure:"top_srvfail"`
 	TopUDPPorts []NameCount   `mapstructure:"top_udp_ports"`
+	TopOrgIDs   []NameCount   `mapstructure:"top_org_ids"`
 	Period      PeriodPayload `mapstructure:"period"`
 }
 

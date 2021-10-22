@@ -7,11 +7,12 @@ package ui
 import (
 	"context"
 	"fmt"
-	"github.com/jroimartin/gocui"
 	"log"
 	"pktvisor/pkg/client"
 	"strconv"
 	"time"
+
+	"github.com/jroimartin/gocui"
 )
 
 type UI interface {
@@ -298,11 +299,11 @@ func (u *ui) updateViews() {
 				return err
 			}
 			u.updateTable(stats.DNS.TopQtype, v, wireSample)
-			v, err = u.gui.View("top_udp_ports")
+			v, err = u.gui.View("top_org_ids")
 			if err != nil {
 				return err
 			}
-			u.updateTable(stats.DNS.TopUDPPorts, v, wireSample)
+			u.updateTable(stats.DNS.TopOrgIDs, v, wireSample)
 			v, err = u.gui.View("slow_in")
 			if err != nil {
 				return err
