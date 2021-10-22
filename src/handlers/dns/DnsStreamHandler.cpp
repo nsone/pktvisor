@@ -329,6 +329,7 @@ void DnsMetricsBucket::specialized_merge(const AbstractMetricsBucket &o)
     _dns_topUDPPort.merge(other._dns_topUDPPort);
     _dns_topQType.merge(other._dns_topQType);
     _dns_topRCode.merge(other._dns_topRCode);
+    _dns_topOrgID.merge(other._dns_topOrgID);
     _dns_slowXactIn.merge(other._dns_slowXactIn);
     _dns_slowXactOut.merge(other._dns_slowXactOut);
 }
@@ -387,6 +388,7 @@ void DnsMetricsBucket::to_json(json &j) const
             return std::to_string(val);
         }
     });
+    _dns_topOrgID.to_json(j);
     _dns_topQType.to_json(j, [](const uint16_t &val) {
         if (QTypeNames.find(val) != QTypeNames.end()) {
             return QTypeNames[val];
@@ -454,8 +456,8 @@ void DnsMetricsBucket::process_dns_layer(bool deep, DnsLayer &payload, pcpp::Pro
     if (query) {
 
         auto name = query->getName();
-
         _dns_qnameCard.update(name);
+
         _dns_topQType.update(query->getDnsType());
 
         if (payload.getDnsHeader()->queryOrResponse == response) {
@@ -477,6 +479,8 @@ void DnsMetricsBucket::process_dns_layer(bool deep, DnsLayer &payload, pcpp::Pro
         if (aggDomain.second.size()) {
             _dns_topQname3.update(std::string(aggDomain.second));
         }
+
+        _dns_topOrgID.update(1632);
     }
 }
 

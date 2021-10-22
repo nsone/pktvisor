@@ -38,6 +38,7 @@ protected:
     TopN<uint16_t> _dns_topUDPPort;
     TopN<uint16_t> _dns_topQType;
     TopN<uint16_t> _dns_topRCode;
+    TopN<uint64_t> _dns_topOrgID;
     TopN<std::string> _dns_slowXactIn;
     TopN<std::string> _dns_slowXactOut;
 
@@ -91,6 +92,7 @@ public:
         , _dns_topUDPPort("dns", {"top_udp_ports"}, "Top UDP source port on the query side of a transaction")
         , _dns_topQType("dns", {"top_qtype"}, "Top query types")
         , _dns_topRCode("dns", {"top_rcode"}, "Top result codes")
+        , _dns_topOrgID("dns", {"top_org_ids"}, "Top organization IDs")
         , _dns_slowXactIn("dns", {"xact", "in", "top_slow"}, "Top QNAMES in transactions where host is the server and transaction speed is slower than p90")
         , _dns_slowXactOut("dns", {"xact", "out", "top_slow"}, "Top QNAMES in transactions where host is the client and transaction speed is slower than p90")
     {
