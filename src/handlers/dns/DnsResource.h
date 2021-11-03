@@ -83,6 +83,11 @@ class IDnsResource
 		 */
 		const std::string& getName() const { return m_DecodedName; }
 
+                /**
+                 * @return The raw name
+                 */
+                std::basic_string_view<uint8_t> getRawName() const;
+
 		/**
 		 * @return The record name's offset in the packet
 		 */

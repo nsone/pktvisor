@@ -198,6 +198,42 @@ DnsType IDnsResource::getDnsType() const
 	return (DnsType)be16toh(dnsType);
 }
 
+std::basic_string_view<uint8_t> IDnsResource::getRawName() const
+{
+    // scan starts at the domain name
+    auto scan = std::basic_string_view<uint8_t>{m_DnsLayer->m_Data, m_DnsLayer->m_DataLen}
+        .substr(m_OffsetInLayer) // skip to the name offset
+        .substr(0, 255);         // enforce name length limit
+
+    // find the end of the scan
+    size_t pos = 0;
+    while (pos < scan.size()) {
+        if (scan[pos] == 0) {
+            // root label at the end
+            pos += 1;
+            break;
+        } else if (scan[pos] < 0xc0) {
+            // normal scan label
+            pos += scan[pos] + 1;
+        } else if (scan[pos] == 0xc0) {
+            // compression label at the end
+            pos += 3;
+            break;
+        } else {
+            // malformed name
+            pos = std::string_view::npos;
+            break;
+        }
+    }
+
+    if (pos >= scan.size()) {
+        // malformed name
+        return {};
+    }
+
+    return scan.substr(0, pos);
+}
+
 void IDnsResource::setDnsType(DnsType newType)
 {
 	uint16_t newTypeAsInt = htobe16((uint16_t)newType);
