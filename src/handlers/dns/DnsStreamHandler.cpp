@@ -388,7 +388,9 @@ void DnsMetricsBucket::to_json(json &j) const
             return std::to_string(val);
         }
     });
-    _dns_topOrgID.to_json(j);
+    _dns_topOrgID.to_json(j, [](const uint64_t &val) {
+        return std::to_string(val);
+    });
     _dns_topQType.to_json(j, [](const uint16_t &val) {
         if (QTypeNames.find(val) != QTypeNames.end()) {
             return QTypeNames[val];
@@ -480,6 +482,8 @@ void DnsMetricsBucket::process_dns_layer(bool deep, DnsLayer &payload, pcpp::Pro
             _dns_topQname3.update(std::string(aggDomain.second));
         }
 
+
+//        uint64_t orgID = 0;
         _dns_topOrgID.update(1632);
     }
 }
