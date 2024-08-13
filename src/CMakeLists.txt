@@ -40,6 +40,8 @@ target_link_libraries(visor-core
         rng
         timer
         opentelemetry_proto
+        ${CONAN_LIBS_PROTOBUF}
+        ${CONAN_LIBS_ABSEIL}
         ${CONAN_LIBS_LIBMAXMINDDB}
         ${CONAN_LIBS_CORRADE}
         ${CONAN_LIBS_SPDLOG}
@@ -47,6 +49,7 @@ target_link_libraries(visor-core
         ${CONAN_LIBS_FAST-CPP-CSV-PARSER}
         ${CONAN_LIBS_YAML-CPP}
         ${CONAN_LIBS_OPENSSL}
+        ${CONAN_LIBS_ZLIB}
         ${VISOR_STATIC_PLUGINS}
         )
 
