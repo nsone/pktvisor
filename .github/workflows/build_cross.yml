@@ -36,8 +36,8 @@ jobs:
             cc: aarch64-linux-musl-gcc
             cxx: aarch64-linux-musl-g++
     env:
-      CC: gcc-10
-      CXX: g++-10
+      CC: gcc
+      CXX: g++
       CONAN_USER_HOME: "${{github.workspace}}"
     steps:
       - name: Install sccache from cache
@@ -69,7 +69,7 @@ jobs:
           curl -L "${{matrix.toolchain}}" | tar -C toolchain -xz --strip-components=1
 
       - name: Install Conan
-        run: pip install --no-cache-dir 'conan==1.64.1' --force-reinstall
+        run: pip install --no-cache-dir 'conan==1.66.0' --force-reinstall
 
       - name: Create Conan configuration
         run: |
