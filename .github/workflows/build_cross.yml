@@ -38,7 +38,7 @@ jobs:
     env:
       CC: gcc
       CXX: g++
-      CONAN_USER_HOME: "${{github.workspace}}"
+ 
     steps:
       - name: Install sccache from cache
         id: cache-sccache
@@ -69,35 +69,7 @@ jobs:
           curl -L "${{matrix.toolchain}}" | tar -C toolchain -xz --strip-components=1
 
       - name: Install Conan
-        run: pip install --no-cache-dir 'conan==1.66.0' --force-reinstall
-
-      - name: Create Conan configuration
-        run: |
-          # init config
-          CONAN_V2_MODE=1 conan config init
-          conan config set general.revisions_enabled=1
-          # add custom compiler settings for libc
-          python3 -c 'import yaml; p = "${{env.CONAN_USER_HOME}}/.conan/settings.yml"; d = yaml.safe_load(open(p)); d["compiler"]["gcc"]["libc"] = ["None", "glibc", "musl"]; yaml.safe_dump(d, open(p, "w"))'
-
-      - name: Create Conan host profile
-        run: |
-          cat > "${{env.CONAN_USER_HOME}}/.conan/profiles/host" << "EOF"
-          [settings]
-          os=Linux
-          os_build=Linux
-          arch=${{matrix.conan_arch}}
-          arch_build=x86_64
-          compiler=gcc
-          compiler.version=11
-          compiler.libcxx=libstdc++11
-          compiler.libc=musl
-          build_type=Release
-          [build_requires]
-          [env]
-          CC=${{github.workspace}}/toolchain/bin/${{matrix.cc}}
-          CXX=${{github.workspace}}/toolchain/bin/${{matrix.cxx}}
-          LDFLAGS=${{matrix.ldflags}}
-          EOF
+        run: pip install --no-cache-dir conan --force-reinstall
 
       - name: Restore sccache
         uses: actions/cache@v4
@@ -113,33 +85,59 @@ jobs:
         with:
           path: src
 
-      - name: Remove crashpad from conanfile
-        run: sed -i "/crashpad/d" ${{github.workspace}}/src/conanfile.py
+      - name: Create Conan configuration
+        working-directory: ${{github.workspace}}/src
+        run: |
+          mkdir build/
+          conan config list
+          python3 -c 'import yaml; p = "build/settings.yml"; d = yaml.safe_load(open(p)); d["compiler"]["gcc"]["libc"] = ["glibc", "musl"]; yaml.safe_dump(d, open(p, "w"))'
+          conan profile detect
+          echo "compiler.libc=glibc" >> $(conan profile path default)
+
+
+      - name: Create Conan host profile
+        working-directory: ${{github.workspace}}/src
+        run: |
+          cat > "$(conan config home)/profiles/host" << "EOF"
+          [settings]
+          os=Linux
+          arch=${{matrix.conan_arch}}
+          compiler=gcc
+          compiler.version=11
+          compiler.cppstd=17
+          compiler.libcxx=libstdc++11
+          compiler.libc=musl
+          build_type=Release
+          [buildenv]
+          CC=${{github.workspace}}/toolchain/bin/${{matrix.cc}}
+          CXX=${{github.workspace}}/toolchain/bin/${{matrix.cxx}}
+          LDFLAGS=${{matrix.ldflags}}
+          EOF
 
       - name: Install dependencies
+        working-directory: ${{github.workspace}}/src
         run: |
-          mkdir build
-          cd build
-          conan install -pr:b default -pr:h host -g virtualenv --build=missing "${{github.workspace}}/src"
+          conan install . -pr:b=default -pr:h="host" --build=missing
 
       - name: Configure
+        working-directory: ${{github.workspace}}/src/build
         run: |
-          cd build
-          source environment.sh.env
           export CC CXX
           export LDFLAGS=-static
-          cmake "${{github.workspace}}/src" \
+          source Release/generators/conanbuild.sh
+          cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
+            -DCONAN_HOST_PROFILE="host" \
+            -DCONAN_INSTALL_ARGS=--build=never \
             -DCRASHPAD_NOT_SUPPORTED=true \
             -DCMAKE_C_COMPILER_LAUNCHER="${{github.workspace}}/bin/sccache" -DCMAKE_CXX_COMPILER_LAUNCHER="${{github.workspace}}/bin/sccache" \
-            -DPKTVISOR_CONAN_INIT=OFF -DPKTVISOR_CONAN_BUILD="never" -DPKTVISOR_CONAN_BUILD_PROFILE="default" -DPKTVISOR_CONAN_HOST_PROFILE="host" \
             -DCORRADE_RC_PROGRAM=$(command -v corrade-rc) \
             -DCMAKE_CXX_STANDARD_LIBRARIES=-latomic
 
       - name: Build
-        run: |
-          cd build
-          make -j4 VERBOSE=1
+        working-directory: ${{github.workspace}}/src/build
+        run: make -j4 VERBOSE=1
 
       - name: Print sccache stats
         run: |
@@ -175,7 +173,7 @@ jobs:
 
       - name: Configure CMake to generate VERSION
         shell: bash
-        run: VERSION_ONLY=1 cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=Release
+        run: VERSION_ONLY=1 cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=Release -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake
         
       - name: Rename folder and copy version
         shell: bash

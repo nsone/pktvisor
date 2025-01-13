@@ -34,8 +34,6 @@ jobs:
       - name: Get Conan
         id: conan
         uses: turtlebrowser/get-conan@c171f295f3f507360ee018736a6608731aa2109d #v1.2
-        with:
-          version: 1.66.0
 
       - name: Setup OSX Environment
         run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
@@ -46,11 +44,14 @@ jobs:
           path: ${{github.workspace}}/build/conan_home/
           key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py', '*/conanfile.py') }}
           restore-keys: conan-${{ runner.os }}-
+      
+      - name: Detect Conan Profile
+        run: conan profile detect -f
 
       - name: Configure CMake
         shell: bash
         working-directory: ${{github.workspace}}/build
-        run: PKG_CONFIG_PATH=${{github.workspace}}/local/lib/pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        run: PKG_CONFIG_PATH=${{github.workspace}}/local/lib/pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake
 
       - name: Build
         working-directory: ${{github.workspace}}/build
@@ -76,8 +77,6 @@ jobs:
       - name: Get Conan
         id: conan
         uses: turtlebrowser/get-conan@c171f295f3f507360ee018736a6608731aa2109d #v1.2
-        with:
-          version: 1.66.0
 
       - name: Setup Conan Cache
         uses: actions/cache@v4
@@ -89,7 +88,7 @@ jobs:
       - name: Configure CMake
         shell: bash
         working-directory: ${{github.workspace}}/build
-        run: PKG_CONFIG_PATH=${{github.workspace}}/local/lib/pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        run: PKG_CONFIG_PATH=${{github.workspace}}/local/lib/pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake
 
       - name: Get VERSION
         id: build
@@ -120,8 +119,6 @@ jobs:
       - name: Get Conan
         id: conan
         uses: turtlebrowser/get-conan@c171f295f3f507360ee018736a6608731aa2109d #v1.2
-        with:
-          version: 1.66.0
 
       - name: Setup Conan Cache
         uses: actions/cache@v4
@@ -133,7 +130,7 @@ jobs:
       - name: Configure CMake
         shell: bash
         working-directory: ${{github.workspace}}\build
-        run: PKG_CONFIG_PATH=${{github.workspace}}\local\lib\pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        run: PKG_CONFIG_PATH=${{github.workspace}}\local\lib\pkgconfig cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake
 
       - name: Get VERSION
         shell: pwsh
@@ -319,13 +316,11 @@ jobs:
       - name: Get Conan
         id: conan
         uses: turtlebrowser/get-conan@c171f295f3f507360ee018736a6608731aa2109d #v1.2
-        with:
-          version: 1.66.0
 
       - name: Configure CMake to generate VERSION
         shell: bash
         working-directory: ${{github.workspace}}/build
-        run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake
 
       - name: Get VERSION
         id: build
