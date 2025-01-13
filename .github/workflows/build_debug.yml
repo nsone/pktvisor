@@ -27,7 +27,7 @@ jobs:
       - name: Setup Conan Cache
         uses: actions/cache@v4
         with:
-          path: ${{github.workspace}}/build/conan_home/
+          path: ${{github.workspace}}/build/p/
           key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py', '*/conanfile.py') }}
           restore-keys: conan-${{ runner.os }}-
 
@@ -78,7 +78,7 @@ jobs:
       - name: Setup Conan Cache
         uses: actions/cache@v4
         with:
-          path: ${{github.workspace}}/build/conan_home/
+          path: ${{github.workspace}}/build/p/
           key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py', '*/conanfile.py') }}
           restore-keys: conan-${{ runner.os }}-
 
@@ -127,7 +127,7 @@ jobs:
         run: echo ${{ env.BRANCH_NAME }}
 
       - name: Get VERSION
-        run: echo "VERSION=`cat ${{github.workspace}}/build/VERSION`" >> $GITHUB_ENV
+        run: echo "VERSION=`cat ${{github.workspace}}/VERSION`" >> $GITHUB_ENV
 
       - name: Debug version
         run: echo ${{ env.VERSION }}
