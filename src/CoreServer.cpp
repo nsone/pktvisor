@@ -353,7 +353,7 @@ void CoreServer::_setup_routes(const PrometheusConfig &prom_config)
     });
     _svr.Delete(fmt::format("/api/v1/policies/({})", AbstractModule::MODULE_ID_REGEX).c_str(), [&](const httplib::Request &req, httplib::Response &res) {
         json j = json::object();
-        auto name = req.matches[1];
+        std::string name = req.matches[1];
         if (!_registry->policy_manager()->module_exists(name)) {
             res.status = 404;
             j["error"] = "policy does not exists";
