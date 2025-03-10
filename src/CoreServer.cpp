@@ -358,10 +358,13 @@ void CoreServer::_setup_routes(const PrometheusConfig &prom_config)
             res.status = 404;
             j["error"] = "policy does not exists";
             res.set_content(j.dump(), "text/json");
+            _logger->info("delete: policy not found: {}", name);
             return;
         }
         try {
+            _logger->info("delete: removing policy: {}", name);
             _registry->policy_manager()->remove_policy(name);
+            _logger->info("delete: removed policy: {}", name);
             res.status = 200;
             res.set_content(j.dump(), "text/json");
         } catch (const std::exception &e) {

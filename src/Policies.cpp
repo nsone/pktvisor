@@ -53,7 +53,13 @@ std::vector<Policy *> PolicyManager::load(const YAML::Node &policy_yaml, bool si
         // serialized policy loads
         std::unique_lock lock(_load_mutex);
 
+        // Ensure policy name isn't already defined
         auto policy_name = _get_policy_name(it);
+        if (module_exists(policy_name)) {
+            // ignore
+            spdlog::get("visor")->warn("ignoring policy with name '{}' already defined", policy_name);
+            continue;
+        }
         // Input Section
         auto input_node = it->second["input"];
         auto [input_config, input_filter] = _registry->input_manager()->get_config_and_filter(input_node);
@@ -224,10 +230,6 @@ std::string PolicyManager::_get_policy_name(YAML::const_iterator it)
     spdlog::get("visor")->info("policy [{}]: parsing", policy_name);
     if (!it->second.IsMap()) {
         throw PolicyException("expecting policy configuration map");
-    }
-    // Ensure policy name isn't already defined
-    if (module_exists(policy_name)) {
-        throw PolicyException(fmt::format("policy with name '{}' already defined", policy_name));
     }
 
     // Policy kind defines schema
