@@ -19,6 +19,7 @@
 #include <pcapplusplus/EthLayer.h>
 #include <pcapplusplus/IPv4Layer.h>
 #include <pcapplusplus/IPv6Layer.h>
+#include <pcapplusplus/IpUtils.h>
 #include <pcapplusplus/Logger.h>
 #include <pcapplusplus/PacketUtils.h>
 #include <pcapplusplus/PcapFileDevice.h>
@@ -28,7 +29,6 @@
 #endif
 #include <assert.h>
 #include <cstdint>
-#include <pcapplusplus/IpUtils.h>
 #include <sstream>
 
 using namespace std::chrono;
@@ -537,6 +537,10 @@ void PcapInputStream::_open_af_packet_iface(const std::string &iface, const std:
 
 void PcapInputStream::_open_libpcap_iface(const std::string &bpfFilter)
 {
+    bool logEnabled = pcpp::Logger::getInstance().logsEnabled();
+    pcpp::Logger::LogLevel logLevel = pcpp::Logger::getInstance().getLogLevel(pcpp::PcapLogModuleLiveDevice);
+    pcpp::Logger::getInstance().enableLogs();
+    pcpp::Logger::getInstance().setLogLevel(pcpp::PcapLogModuleLiveDevice, pcpp::Logger::LogLevel::Debug);
 
     pcpp::PcapLiveDevice::DeviceConfiguration config;
     /*
@@ -560,6 +564,9 @@ void PcapInputStream::_open_libpcap_iface(const std::string &bpfFilter)
 
     // try to open device
     if (!_pcapDevice->open(config)) {
+        pcpp::Logger::getInstance().setLogLevel(pcpp::PcapLogModuleLiveDevice, logLevel);
+        if (!logEnabled)
+            pcpp::Logger::getInstance().suppressLogs();
         throw PcapException("Cannot open interface for packet capture");
     }
 
