@@ -171,11 +171,6 @@ public:
         set_num_sample_info(DNS_SCHEMA, {"wire_packets", "deep_samples"}, "Total DNS wire packets that were sampled for deep inspection");
     }
 
-    ~DnsMetricsBucket()
-    {
-        std::unique_lock lock(_mutex);
-    }
-
     auto get_xact_data_locked() const
     {
         std::shared_lock lock(_mutex);
