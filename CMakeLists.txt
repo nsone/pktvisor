@@ -18,16 +18,19 @@ set(VISOR_PRERELEASE "-develop")
 # note this only updates on cmake reconfigure, not every git commit
 # so it's mainly useful for GitHub CI, not developers
 if(VISOR_PRERELEASE STREQUAL "-develop" OR VISOR_PRERELEASE STREQUAL "-rc")
-    execute_process(
-            COMMAND
-            git rev-parse --short HEAD
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-            RESULT_VARIABLE
-            SHORT_HASH_RESULT
-            OUTPUT_VARIABLE
-            SHORT_HASH
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
+    # Allow to overwrite version
+    if(NOT DEFINED SHORT_HASH)
+        execute_process(
+                COMMAND
+                git rev-parse --short HEAD
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                RESULT_VARIABLE
+                SHORT_HASH_RESULT
+                OUTPUT_VARIABLE
+                SHORT_HASH
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif()
     if ("${SHORT_HASH}" STREQUAL "")
         message(FATAL "Unable to get current git hash for develop/rc version")
     endif ()
