@@ -169,8 +169,8 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             offsetInPacket += newResource->getSize();
         }
 
-        if (offsetInPacket > m_DataLen) {
-            // Parse packet failed, DNS resource is out of bounds. Probably a bad packet
+        if (newGenResource->m_NameLength == 0 || offsetInPacket > m_DataLen) {
+            // Parse packet failed, DNS resource name failed to decode or is out of bounds. Probably a bad packet
             delete newGenResource;
             m_ResourcesParsed = true;
             m_ResourcesParseResult = false;

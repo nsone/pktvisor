@@ -286,7 +286,9 @@ void DnsStreamHandler::process_udp_packet_cb(pcpp::Packet &payload, PacketDirect
         if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
             _cached_dns_layer.flowKey = flowkey;
             _cached_dns_layer.timestamp = stamp;
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(udpLayer, &payload);
+            // Deep-copy the raw bytes out of the pcap mmap ring buffer so the DnsLayer
+            // owns its data and cannot be invalidated when the ring slot is recycled.
+            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(udpLayer, &payload));
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, l3, pcpp::UDP, metric_port, stamp) && _configs(*dnsLayer)) {
@@ -320,7 +322,9 @@ void DnsStreamHandler::process_tcp_reassembled_packet_cb(pcpp::Packet &payload, 
         if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
             _cached_dns_layer.flowKey = flowkey;
             _cached_dns_layer.timestamp = stamp;
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(tcpLayer, &payload);
+            // Deep-copy the raw bytes out of the pcap mmap ring buffer so the DnsLayer
+            // owns its data and cannot be invalidated when the ring slot is recycled.
+            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(tcpLayer, &payload));
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, l3, pcpp::TCP, metric_port, stamp) && _configs(*dnsLayer)) {
@@ -494,7 +498,7 @@ inline void DnsStreamHandler::_register_predicate_filter(Filters filter, std::st
             if (flowkey != cache.flowKey || stamp.tv_sec != cache.timestamp.tv_sec || stamp.tv_nsec != cache.timestamp.tv_nsec) {
                 cache.flowKey = flowkey;
                 cache.timestamp = stamp;
-                cache.dnsLayer = std::make_unique<DnsLayer>(udpLayer, &payload);
+                cache.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(udpLayer, &payload));
             }
             auto dnsLayer = cache.dnsLayer.get();
             // return the 'jump key' for pcap to make O(1) call to appropriate signals
@@ -511,7 +515,7 @@ inline void DnsStreamHandler::_register_predicate_filter(Filters filter, std::st
             if (flowkey != cache.flowKey || stamp.tv_sec != cache.timestamp.tv_sec || stamp.tv_nsec != cache.timestamp.tv_nsec) {
                 cache.flowKey = flowkey;
                 cache.timestamp = stamp;
-                cache.dnsLayer = std::make_unique<DnsLayer>(udpLayer, &payload);
+                cache.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(udpLayer, &payload));
             }
             auto dnsLayer = cache.dnsLayer.get();
             // return the 'jump key' for pcap to make O(1) call to appropriate signals
@@ -985,7 +989,7 @@ void DnsMetricsBucket::process_dns_layer(bool deep, DnsLayer &payload, pcpp::Pro
     auto query = payload.getFirstQuery();
     if (query) {
 
-        auto name = query->getNameLower();
+        auto name = std::string(query->getNameLower());
 
         if (group_enabled(group::DnsMetrics::Cardinality)) {
             _dns_qnameCard.update(name);
@@ -1125,7 +1129,7 @@ void DnsMetricsBucket::new_dns_transaction(bool deep, float to90th, float from90
 
         auto query = dns.getFirstQuery();
         if (query) {
-            auto name = query->getName();
+            auto name = std::string(query->getName());
             // dir is the direction of the last packet, meaning the reply so from a transaction perspective
             // we look at it from the direction of the query, so the opposite side than we have here
             if (dir == PacketDirection::toHost && from90th > 0 && xactTime >= from90th) {

@@ -286,7 +286,9 @@ void DnsStreamHandler::process_udp_packet_cb(pcpp::Packet &payload, PacketDirect
         if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
             _cached_dns_layer.flowKey = flowkey;
             _cached_dns_layer.timestamp = stamp;
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(udpLayer, &payload);
+            // Deep-copy the raw bytes out of the pcap mmap ring buffer so the DnsLayer
+            // owns its data and cannot be invalidated when the ring slot is recycled.
+            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(udpLayer, &payload));
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
@@ -320,7 +322,9 @@ void DnsStreamHandler::process_tcp_reassembled_packet_cb(pcpp::Packet &payload, 
         if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
             _cached_dns_layer.flowKey = flowkey;
             _cached_dns_layer.timestamp = stamp;
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(tcpLayer, &payload);
+            // Deep-copy the raw bytes out of the pcap mmap ring buffer so the DnsLayer
+            // owns its data and cannot be invalidated when the ring slot is recycled.
+            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(tcpLayer, &payload));
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
@@ -1031,7 +1035,7 @@ void DnsMetricsBucket::new_dns_transaction(bool deep, float per90th, DnsLayer &p
     auto query = payload.getFirstQuery();
     if (query) {
 
-        auto name = query->getNameLower();
+        auto name = std::string(query->getNameLower());
 
         if (group_enabled(group::DnsMetrics::Cardinality)) {
             data.qnameCard.update(name);
