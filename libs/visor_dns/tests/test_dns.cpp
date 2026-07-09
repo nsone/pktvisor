@@ -165,15 +165,16 @@ TEST_CASE("RFC 9267 §2 — compression pointer validation", "[dns][rfc9267]")
     SECTION("valid backward compression pointer is accepted")
     {
         // Packet layout (all offsets from byte 0):
-        //  0x00–0x0b  12-byte DNS header
+        //  0x00–0x0b  12-byte DNS header (QDCOUNT=2)
         //  0x0c        label len = 4
         //  0x0d–0x10  "test"
         //  0x11        label len = 3
         //  0x12–0x14  "com"
         //  0x15        0x00  (root)
-        //  0x16–0x17   QTYPE / QCLASS  (first question ends here)
-        //  0x18        compression pointer 0xC0 0x0C  → offset 0x0C  (backward: valid)
-        //  0x1a–0x1b   QTYPE / QCLASS  (second question)
+        //  0x16–0x17   QTYPE / QCLASS  (first question)
+        //  0x18–0x19   compression pointer 0xC0 0x0C  → offset 0x0C  (backward: valid)
+        //  0x1a–0x1b   QTYPE
+        //  0x1c–0x1d   QCLASS  (second question)
         uint8_t pkt[30];
         memset(pkt, 0, sizeof(pkt));
         write_dns_header(pkt, 2); // QDCOUNT = 2
@@ -186,9 +187,12 @@ TEST_CASE("RFC 9267 §2 — compression pointer validation", "[dns][rfc9267]")
         // Second QNAME: compression pointer back to offset 12
         pkt[26] = 0xC0; pkt[27] = 0x0C;
         pkt[28] = 0x00; pkt[29] = 0x01; // QTYPE
-        // no QCLASS bytes — but parseResources needs name + type for queries
+        // QCLASS for second question needs 2 more bytes — declare correct size
+        uint8_t pkt2[32] = {};
+        memcpy(pkt2, pkt, sizeof(pkt));
+        pkt2[30] = 0x00; pkt2[31] = 0x01;
 
-        DnsLayer layer(pkt, sizeof(pkt), nullptr, nullptr);
+        DnsLayer layer(pkt2, sizeof(pkt2), nullptr, nullptr);
         CHECK(layer.parseResources(false, false, true) == true);
         auto *q = layer.getFirstQuery();
         REQUIRE(q != nullptr);
