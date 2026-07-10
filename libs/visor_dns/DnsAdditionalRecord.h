@@ -80,7 +80,7 @@ static std::unique_ptr<DnsAdditionalEcs> parse_additional_records_ecs(DnsResourc
     if (ecs->family == FamilyAddressEnum::IPV4) {
         char addr_buffer[INET_ADDRSTRLEN];
         std::array<uint8_t, IPV4_BYTE_SIZE> ipv4 = {};
-        for (auto i = offset; i < size; i++) {
+        for (auto i = offset; i < std::min(size, offset + IPV4_BYTE_SIZE); i++) {
             ipv4[i - offset] = array[i];
         }
         if (inet_ntop(AF_INET, &ipv4, addr_buffer, sizeof(addr_buffer)) != NULL) {
@@ -89,7 +89,7 @@ static std::unique_ptr<DnsAdditionalEcs> parse_additional_records_ecs(DnsResourc
     } else if (ecs->family == FamilyAddressEnum::IPV6) {
         char addr_buffer[INET6_ADDRSTRLEN];
         std::array<uint8_t, IPV6_BYTE_SIZE> ipv6 = {};
-        for (auto i = offset; i < std::min(size, IPV6_BYTE_SIZE); i++) {
+        for (auto i = offset; i < std::min(size, offset + IPV6_BYTE_SIZE); i++) {
             ipv6[i - offset] = array[i];
         }
         if (inet_ntop(AF_INET6, &ipv6, addr_buffer, sizeof(addr_buffer)) != NULL) {

@@ -2,7 +2,9 @@
 
 #include "DnsLayer.h"
 #include "EndianPortable.h"
+#include "fmt/format.h"
 #include <pcapplusplus/IpAddress.h>
+#include <pcapplusplus/UdpLayer.h>
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
@@ -28,6 +30,25 @@ DnsLayer::DnsLayer(uint8_t *data, size_t dataLen, Layer *prevLayer, pcpp::Packet
     m_FirstAnswer = NULL;
     m_FirstAuthority = NULL;
     m_FirstAdditional = NULL;
+
+    // detect UDP payload truncation (snaplen, MTU, reassembly, etc.) and
+    // vould be the cause of downstream decodeName label-out-of-bounds errors.
+    if (prevLayer != nullptr && prevLayer->getProtocol() == pcpp::UDP) {
+        auto *udpLayer = dynamic_cast<pcpp::UdpLayer *>(prevLayer);
+        if (udpLayer != nullptr) {
+            const auto *hdr = reinterpret_cast<const pcpp::udphdr *>(udpLayer->getData());
+            // udphdr::length covers the UDP header itself plus payload
+            size_t udpDeclaredPayloadLen = ntohs(hdr->length) > sizeof(pcpp::udphdr)
+                ? ntohs(hdr->length) - sizeof(pcpp::udphdr)
+                : 0;
+            if (dataLen != udpDeclaredPayloadLen) {
+                PCPP_LOG_DEBUG(fmt::format(
+                    "DnsLayer: UDP payload size mismatch — captured {} bytes, UDP header declares {} bytes payload; "
+                    "packet is likely truncated (snaplen/MTU/reassembly issue)",
+                    dataLen, udpDeclaredPayloadLen).c_str());
+            }
+        }
+    }
 }
 
 DnsLayer::DnsLayer()
