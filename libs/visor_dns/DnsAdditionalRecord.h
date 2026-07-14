@@ -58,8 +58,9 @@ static std::unique_ptr<DnsAdditionalEcs> parse_additional_records_ecs(DnsResourc
     std::unique_ptr<uint8_t[]> array(new uint8_t[data_length]);
     additional->getData()->toByteArr(array.get(), size, nullptr);
 
-    // data should contain at least the standard fields size
-    if (size != data_length || size < 9) {
+    // data should contain at least the 8 fixed ECS fields
+    // (option_code(2) + option_length(2) + family(2) + src_mask(1) + scope_mask(1))
+    if (size != data_length || size < 8) {
         return nullptr;
     }
 

@@ -295,13 +295,15 @@ static std::vector<uint8_t> make_ecs_rdata(uint8_t addr_byte_count, uint8_t src_
     // option-length covers family(2) + src_mask(1) + scope_mask(1) + addr_bytes
     uint16_t opt_len = static_cast<uint16_t>(4 + addr_byte_count);
     std::vector<uint8_t> rdata;
-    // option_code = 8 (CSUBNET), little-endian as stored (be16toh applied in parser)
-    rdata.push_back(0x08); rdata.push_back(0x00); // array[0]=lo, array[1]=hi → 0x0008
-    // option_length
-    rdata.push_back(static_cast<uint8_t>(opt_len & 0xFF));
+    // The parser reads: be16toh((array[1]<<8)|array[0]), so fields must be
+    // stored with array[0]=hi-byte, array[1]=lo-byte (i.e. big-endian / network order).
+    // option_code = 8 (CSUBNET): hi=0x00, lo=0x08
+    rdata.push_back(0x00); rdata.push_back(0x08);
+    // option_length: big-endian
     rdata.push_back(static_cast<uint8_t>(opt_len >> 8));
-    // family = 1 (IPv4)
-    rdata.push_back(0x01); rdata.push_back(0x00);
+    rdata.push_back(static_cast<uint8_t>(opt_len & 0xFF));
+    // family = 1 (IPv4): hi=0x00, lo=0x01
+    rdata.push_back(0x00); rdata.push_back(0x01);
     // source_netmask, scope_netmask
     rdata.push_back(src_prefix); rdata.push_back(0x00);
     // address bytes (filled with 0xAB for distinctiveness)
@@ -412,10 +414,11 @@ TEST_CASE("parse_additional_records_ecs — IPv4 overflow regression", "[dns][ec
         uint8_t addr_byte_count = 16;
         uint16_t opt_len = static_cast<uint16_t>(4 + addr_byte_count);
         std::vector<uint8_t> rdata;
-        rdata.push_back(0x08); rdata.push_back(0x00); // option_code = CSUBNET (8)
-        rdata.push_back(static_cast<uint8_t>(opt_len & 0xFF));
+        // big-endian (network order) to match parser: be16toh((array[1]<<8)|array[0])
+        rdata.push_back(0x00); rdata.push_back(0x08); // option_code = CSUBNET (8)
         rdata.push_back(static_cast<uint8_t>(opt_len >> 8));
-        rdata.push_back(0x02); rdata.push_back(0x00); // family = 2 (IPv6)
+        rdata.push_back(static_cast<uint8_t>(opt_len & 0xFF));
+        rdata.push_back(0x00); rdata.push_back(0x02); // family = 2 (IPv6)
         rdata.push_back(64);   rdata.push_back(0x00); // source/scope netmask
         // 16 address bytes encoding 2001:db8::1
         uint8_t v6[16] = {0x20,0x01,0x0d,0xb8,0,0,0,0,0,0,0,0,0,0,0,0x01};
