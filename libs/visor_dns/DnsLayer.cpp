@@ -147,6 +147,13 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         return m_ResourcesParseResult;
     }
 
+    // Reject payloads that are too short to contain a valid DNS header.
+    if (m_DataLen < sizeof(dnshdr)) {
+        m_ResourcesParsed = true;
+        m_ResourcesParseResult = false;
+        return m_ResourcesParseResult;
+    }
+
     size_t offsetInPacket = sizeof(dnshdr);
     IDnsResource *curResource = m_ResourceList;
 

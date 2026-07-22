@@ -3,7 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #include <csignal>
+#include <fstream>
 #include <functional>
+#if __has_include(<unistd.h>)
+#include <unistd.h>
+#endif
 
 #include "CoreServer.h"
 #include "CrashpadHandler.h"
@@ -589,6 +593,19 @@ int main(int argc, char *argv[])
     registry.handler_manager()->set_default_num_periods(options.periods.value());
 
     logger->info("{} starting up", VISOR_VERSION);
+
+    // write pid file once at startup (before any handlers are created)
+#if __has_include(<unistd.h>)
+    {
+        const std::string pidFile = "/var/run/ns1-pktvisor.pid";
+        std::ofstream file(pidFile);
+        if (!file.is_open()) {
+            logger->error("cannot write pid to {}", pidFile);
+            exit(EXIT_FAILURE);
+        }
+        file << getpid() << std::endl;
+    }
+#endif
 
     // if we are demonized, change to root directory now that (potentially) logs are open
     if (options.daemon) {
