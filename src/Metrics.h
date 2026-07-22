@@ -858,6 +858,7 @@ public:
     void cancel()
     {
         _timer_handle->cancel();
+        _timer_handle->wait_for(100ms); // drain in-flight
         std::unique_lock w_lock(_sketch_mutex);
         _rate.store(0, std::memory_order_relaxed);
         _counter.store(0, std::memory_order_relaxed);

@@ -39,11 +39,13 @@ class OpenTelemetry
     std::unique_ptr<httplib::Client> _client;
     collector::metrics::v1::ExportMetricsServiceRequest _request;
     metrics::v1::ResourceMetrics *_resource;
+    timer _timer_thread;
     std::shared_ptr<timer::interval_handle> _timer_handle;
     std::function<bool(metrics::v1::ResourceMetrics &resource)> _callback;
 
 public:
     OpenTelemetry(const OtelConfig &config)
+        : _timer_thread{std::chrono::seconds(config.interval_sec)}
     {
         if (!config.tls_cert.empty() && !config.tls_key.empty()) {
             _client = std::make_unique<httplib::Client>(config.endpoint, config.port_number, config.tls_cert, config.tls_key);
@@ -51,9 +53,8 @@ public:
             _client = std::make_unique<httplib::Client>(config.endpoint, config.port_number);
         }
         _resource = _request.add_resource_metrics();
-        static timer timer_thread{std::chrono::seconds(config.interval_sec)};
         auto path = config.path;
-        _timer_handle = timer_thread.set_interval(std::chrono::seconds(config.interval_sec), [path, this] {
+        _timer_handle = _timer_thread.set_interval(std::chrono::seconds(config.interval_sec), [path, this] {
             _resource->clear_scope_metrics();
             if (_callback && _callback(*_resource)) {
                 if (auto body_size = _request.ByteSizeLong(); body_size > sizeof(_request)) {
