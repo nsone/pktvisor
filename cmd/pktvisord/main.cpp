@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+#include <clocale>
 #include <csignal>
 #include <fstream>
 #include <functional>
@@ -520,6 +521,11 @@ visor:
 
 int main(int argc, char *argv[])
 {
+    // Force C locale so std::string comparisons use byte order instead of
+    // locale-aware collation (__strxfrm_l), which is expensive in the packet
+    // processing hot path when many TopN<std::string> buckets are updated.
+    std::setlocale(LC_ALL, "C");
+
     std::map<std::string, docopt::value> args = docopt::docopt(USAGE,
         {argv + 1, argv + argc},
         true,           // show help if requested

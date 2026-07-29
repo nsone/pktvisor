@@ -131,7 +131,8 @@ private:
         "host_spec",
         "pcap_file",
         "pcap_source",
-        "tcp_packet_reassembly_cache_limit"};
+        "tcp_packet_reassembly_cache_limit",
+        "af_packet_num_blocks"};
 
 protected:
     void _open_pcap(const std::string &fileName, const std::string &bpfFilter);

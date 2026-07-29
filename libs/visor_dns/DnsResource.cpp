@@ -2,16 +2,16 @@
 
 #include "DnsResource.h"
 #include "EndianPortable.h"
-#include "fmt/format.h"
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
 #include <pcapplusplus/Logger.h>
+#include <pcapplusplus/ProtocolType.h>
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
-#include <sstream>
+#include <cstdio>
 #include <string.h>
 
 namespace visor::lib::dns {
@@ -57,19 +57,63 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
     char *resultPtr = result;
     resultPtr[0] = 0;
 
-    // Returns the portion of result decoded so far (safe because resultPtr[0] is always kept NUL).
-    auto decoded_so_far = [&]() -> const char * { return result; };
+    // Fills buf with a concise DNS header context for error log lines.
+    // Uses snprintf into a stack buffer — no heap allocation, no fmt::format.
+    char _err_buf[160];
+    auto log_err = [&](const char *msg) {
+        if (m_DnsLayer->m_DataLen < sizeof(dnshdr)) {
+            snprintf(_err_buf, sizeof(_err_buf), "decodeName: %s; dns_hdr: <too short>", msg);
+        } else {
+            const auto *hdr = m_DnsLayer->getDnsHeader();
+            const char *transport_str = "unknown";
+            if (const auto *prev = m_DnsLayer->getPrevLayer(); prev != nullptr) {
+                if (prev->getProtocol() == pcpp::UDP) transport_str = "UDP";
+                else if (prev->getProtocol() == pcpp::TCP) transport_str = "TCP";
+            }
+            const char *qr_str = hdr->queryOrResponse == 0 ? "query"
+                               : hdr->queryOrResponse == 1 ? "response"
+                               : "invalid";
+            const char *opcode_str;
+            switch (hdr->opcode) {
+                case 0:  opcode_str = "QUERY";   break;
+                case 1:  opcode_str = "IQUERY";  break;
+                case 2:  opcode_str = "STATUS";  break;
+                case 4:  opcode_str = "NOTIFY";  break;
+                case 5:  opcode_str = "UPDATE";  break;
+                default: opcode_str = "RESERVED"; break;
+            }
+            const char *rcode_str;
+            switch (hdr->responseCode) {
+                case 0:  rcode_str = "NOERROR";   break;
+                case 1:  rcode_str = "FORMERR";   break;
+                case 2:  rcode_str = "SERVFAIL";  break;
+                case 3:  rcode_str = "NXDOMAIN";  break;
+                case 4:  rcode_str = "NOTIMP";    break;
+                case 5:  rcode_str = "REFUSED";   break;
+                case 6:  rcode_str = "YXDOMAIN";  break;
+                case 7:  rcode_str = "YXRRSET";   break;
+                case 8:  rcode_str = "NXRRSET";   break;
+                case 9:  rcode_str = "NOTAUTH";   break;
+                case 10: rcode_str = "NOTZONE";   break;
+                default: rcode_str = "UNASSIGNED"; break;
+            }
+            snprintf(_err_buf, sizeof(_err_buf),
+                "decodeName: %s; dns_hdr: transport=%s qr=%s opcode=%s rcode=%s qd=%u an=%u ns=%u ar=%u",
+                msg, transport_str, qr_str, opcode_str, rcode_str,
+                be16toh(hdr->numberOfQuestions), be16toh(hdr->numberOfAnswers),
+                be16toh(hdr->numberOfAuthority), be16toh(hdr->numberOfAdditional));
+        }
+        PCPP_LOG_ERROR(_err_buf);
+    };
 
     size_t curOffsetInLayer = (uint8_t *)encodedName - m_DnsLayer->m_Data;
     if (curOffsetInLayer >= m_DnsLayer->m_DataLen) {
-        PCPP_LOG_ERROR(fmt::format("decodeName: curOffsetInLayer ({}) >= m_DnsLayer->m_DataLen ({}), decoded so far: '{}'",
-                            curOffsetInLayer, m_DnsLayer->m_DataLen, decoded_so_far()).c_str());
+        log_err("name offset past end of packet");
         return 0;
     }
 
     if (iteration > 20) {
-        PCPP_LOG_ERROR(fmt::format("decodeName: recursion depth ({}) exceeded limit, decoded so far: '{}'",
-                            iteration, decoded_so_far()).c_str());
+        log_err("max recursion depth exceeded");
         return 0;
     }
 
@@ -80,21 +124,18 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
         // A pointer to another place in the packet
         if ((wordLength & 0xc0) == 0xc0) {
             if (curOffsetInLayer + 2 > m_DnsLayer->m_DataLen || encodedNameLength >= 255) {
-                PCPP_LOG_ERROR(fmt::format("decodeName pointer case: out-of-bounds: curOffsetInLayer ({}) + 2 > m_DnsLayer->m_DataLen ({}) or encodedNameLength ({}) >= 255, decoded so far: '{}'",
-                                    curOffsetInLayer, m_DnsLayer->m_DataLen, encodedNameLength, decoded_so_far()).c_str());
+                log_err("pointer out-of-bounds or name too long");
                 return 0;
             }
 
             uint16_t offsetInLayer = (wordLength & 0x3f) * 256 + (0xFF & encodedName[1]);
             if (offsetInLayer < sizeof(dnshdr) || offsetInLayer >= m_DnsLayer->m_DataLen) {
-                PCPP_LOG_ERROR(fmt::format("DNS parsing error: name pointer is illegal, offsetInLayer = {}, decoded so far: '{}'",
-                                    offsetInLayer, decoded_so_far()).c_str());
+                log_err("name pointer outside valid range");
                 return 0;
             }
             // RFC 9267 §2: pointer must point backward to prevent forward-reference loops
             if (offsetInLayer >= curOffsetInLayer) {
-                PCPP_LOG_ERROR(fmt::format("DNS parsing error: name pointer is not backward, offsetInLayer = {} curOffsetInLayer = {}, decoded so far: '{}'",
-                                    offsetInLayer, curOffsetInLayer, decoded_so_far()).c_str());
+                log_err("name pointer is not backward");
                 return 0;
             }
 
@@ -102,8 +143,7 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
             memset(tempResult, 0, 256);
             size_t ret = decodeName((const char *)(m_DnsLayer->m_Data + offsetInLayer), tempResult, iteration + 1);
             if (ret == 0) {
-                PCPP_LOG_ERROR(fmt::format("decodeName: recursive call failed at offset {}, decoded so far: '{}'",
-                                    offsetInLayer, decoded_so_far()).c_str());
+                log_err("recursive call failed");
                 return 0;
             }
 
@@ -121,14 +161,12 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
         } else {
             // RFC 9267 §3: label length must be 1–63 per RFC 1035 §2.3.4
             if (wordLength > 63) {
-                PCPP_LOG_ERROR(fmt::format("decodeName: label length ({}) exceeds RFC 1035 maximum of 63, decoded so far: '{}'",
-                                    wordLength, decoded_so_far()).c_str());
+                log_err("label length exceeds RFC 1035 maximum of 63");
                 return 0;
             }
             // return if next word would be outside of the DNS layer or overflow the buffer behind resultPtr
             if (curOffsetInLayer + wordLength + 1 > m_DnsLayer->m_DataLen || encodedNameLength + wordLength >= 255) {
-                PCPP_LOG_ERROR(fmt::format("decodeName: label out-of-bounds: curOffsetInLayer ({}) + wordLength ({}) + 1 > m_DnsLayer->m_DataLen ({}) or encodedNameLength ({}) + wordLength ({}) >= 255, decoded so far: '{}'",
-                                    curOffsetInLayer, wordLength, m_DnsLayer->m_DataLen, encodedNameLength, wordLength, decoded_so_far()).c_str());
+                log_err("label out-of-bounds or name too long");
                 return 0;
             }
 
@@ -142,8 +180,7 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
 
             curOffsetInLayer = (uint8_t *)encodedName - m_DnsLayer->m_Data;
             if (curOffsetInLayer >= m_DnsLayer->m_DataLen) {
-                PCPP_LOG_ERROR(fmt::format("decodeName: after label, curOffsetInLayer ({}) >= m_DnsLayer->m_DataLen ({}), decoded so far: '{}'",
-                                    curOffsetInLayer, m_DnsLayer->m_DataLen, decoded_so_far()).c_str());
+                log_err("offset past end of packet after label");
                 return 0;
             }
 

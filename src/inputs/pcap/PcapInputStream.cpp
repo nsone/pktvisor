@@ -529,8 +529,12 @@ void PcapInputStream::_open_pcap(const std::string &fileName, const std::string 
 #ifdef __linux__
 void PcapInputStream::_open_af_packet_iface(const std::string &iface, const std::string &bpfFilter)
 {
-
-    _af_device = std::make_unique<AFPacket>(this, _packet_arrives_cb, bpfFilter, iface);
+    unsigned int num_blocks = 64;
+    if (config_exists("af_packet_num_blocks")) {
+        num_blocks = static_cast<unsigned int>(config_get<uint64_t>("af_packet_num_blocks"));
+    }
+    _af_device = std::make_unique<AFPacket>(this, _packet_arrives_cb, bpfFilter, iface,
+        /*fanout_group_id=*/-1, /*block_size=*/1 << 22, /*frame_size=*/1 << 11, num_blocks);
     _af_device->start_capture();
 }
 #endif
