@@ -59,7 +59,7 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
 
     // Fills buf with a concise DNS header context for error log lines.
     // Uses snprintf into a stack buffer — no heap allocation, no fmt::format.
-    char _err_buf[160];
+    char _err_buf[192];
     auto log_err = [&](const char *msg) {
         if (m_DnsLayer->m_DataLen < sizeof(dnshdr)) {
             snprintf(_err_buf, sizeof(_err_buf), "decodeName: %s; dns_hdr: <too short>", msg);
@@ -121,6 +121,19 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
 
     // A string to parse
     while (wordLength != 0) {
+        // Re-validate the current pointer position at the top of every iteration before
+        // reading any byte from it — closes the gap where a label walk or pointer follow
+        // could leave encodedName pointing outside the packet buffer.
+        curOffsetInLayer = (uint8_t *)encodedName - m_DnsLayer->m_Data;
+        if (curOffsetInLayer >= m_DnsLayer->m_DataLen) {
+            log_err("name pointer walked past end of packet");
+            return 0;
+        }
+        wordLength = encodedName[0];
+        if (wordLength == 0) {
+            break;
+        }
+
         // A pointer to another place in the packet
         if ((wordLength & 0xc0) == 0xc0) {
             if (curOffsetInLayer + 2 > m_DnsLayer->m_DataLen || encodedNameLength >= 255) {
@@ -183,8 +196,7 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
                 log_err("offset past end of packet after label");
                 return 0;
             }
-
-            wordLength = encodedName[0];
+            // wordLength is re-read at the top of the next iteration
         }
     }
 
@@ -193,8 +205,11 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
         result[resultPtr - result - 1] = 0;
     }
 
-    // add the last '\0' to encodedNameLength
-    resultPtr[0] = 0;
+    // add the last '\0' to encodedNameLength; guard against writing at offset 255
+    // (the buffer is char[256] so index 255 is the last valid byte)
+    if (resultPtr - result < 255) {
+        resultPtr[0] = 0;
+    }
     encodedNameLength++;
 
     return encodedNameLength;
@@ -309,8 +324,8 @@ void IDnsResource::setDnsLayer(DnsLayer *dnsLayer, size_t offsetInLayer)
 
 std::basic_string_view<uint8_t> IDnsResource::getRawName() const
 {
-    if (m_NameLength == 0) {
-        // malformed name
+    if (m_NameLength == 0 || m_DnsLayer == nullptr) {
+        // malformed name or detached resource (constructed via emptyRawData path)
         return {};
     }
     // scan starts at the domain name

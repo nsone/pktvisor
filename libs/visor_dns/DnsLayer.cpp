@@ -187,6 +187,14 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             numOfAdditional--;
         }
 
+        // Reject before constructing if offset is already past the end of the packet.
+        // This prevents the resource constructor from dereferencing an out-of-bounds offset.
+        if (offsetInPacket >= m_DataLen) {
+            m_ResourcesParsed = true;
+            m_ResourcesParseResult = false;
+            return m_ResourcesParseResult;
+        }
+
         DnsResource *newResource = NULL;
         DnsQuery *newQuery = NULL;
         IDnsResource *newGenResource = NULL;
