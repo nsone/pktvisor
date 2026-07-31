@@ -47,8 +47,8 @@ static bool start_crashpad_handler(std::string token, std::string url, std::stri
     if (database == nullptr || database->GetSettings() == NULL)
         return false;
 
-    /* Enable automated uploads. */
-    database->GetSettings()->SetUploadsEnabled(true);
+    /* Disable automated uploads; keep the local crash database for core dumps. */
+    database->GetSettings()->SetUploadsEnabled(false);
 
     rc = client.StartHandler(handler, db, db, url, "", annotations, arguments, true, false);
     if (rc == false) {

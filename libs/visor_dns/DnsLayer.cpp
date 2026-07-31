@@ -2,7 +2,6 @@
 
 #include "DnsLayer.h"
 #include "EndianPortable.h"
-#include "fmt/format.h"
 #include <pcapplusplus/IpAddress.h>
 #include <pcapplusplus/UdpLayer.h>
 #ifdef __GNUC__
@@ -13,7 +12,6 @@
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
-#include <iomanip>
 #include <sstream>
 #include <stdlib.h>
 #include <string.h>
@@ -45,10 +43,7 @@ DnsLayer::DnsLayer(uint8_t *data, size_t dataLen, Layer *prevLayer, pcpp::Packet
                 ? ntohs(hdr->length) - sizeof(pcpp::udphdr)
                 : 0;
             if (dataLen != udpDeclaredPayloadLen) {
-                PCPP_LOG_DEBUG(fmt::format(
-                    "DnsLayer: UDP payload size mismatch — captured {} bytes, UDP header declares {} bytes payload; "
-                    "packet is likely truncated (snaplen/MTU/reassembly issue)",
-                    dataLen, udpDeclaredPayloadLen).c_str());
+                PCPP_LOG_DEBUG("DnsLayer: UDP payload size mismatch: packet is likely truncated (snaplen/MTU/reassembly issue)");
             }
         }
     }
@@ -147,6 +142,22 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         return m_ResourcesParseResult;
     }
 
+    // on forced re-parse, free any previously allocated resources
+    if (forceParse && m_ResourceList != NULL) {
+        IDnsResource *cur = m_ResourceList;
+        while (cur != NULL) {
+            IDnsResource *next = cur->getNextResource();
+            delete cur;
+            cur = next;
+        }
+        m_ResourceList = NULL;
+        m_FirstQuery = NULL;
+        m_FirstAnswer = NULL;
+        m_FirstAuthority = NULL;
+        m_FirstAdditional = NULL;
+        m_ResourcesParsed = false;
+    }
+
     // Reject payloads that are too short to contain a valid DNS header.
     if (m_DataLen < sizeof(dnshdr)) {
         m_ResourcesParsed = true;
@@ -201,15 +212,28 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         if (resType == DnsQueryType) {
             newQuery = new DnsQuery(this, offsetInPacket);
             newGenResource = newQuery;
+            if (newQuery->m_NameLength == 0) {
+                delete newGenResource;
+                m_ResourcesParsed = true;
+                m_ResourcesParseResult = false;
+                return m_ResourcesParseResult;
+            }
             offsetInPacket += newQuery->getSize();
         } else {
             newResource = new DnsResource(this, offsetInPacket, resType);
             newGenResource = newResource;
+            if (newResource->m_NameLength == 0 ||
+                offsetInPacket + newResource->m_NameLength + 10 > m_DataLen) {
+                delete newGenResource;
+                m_ResourcesParsed = true;
+                m_ResourcesParseResult = false;
+                return m_ResourcesParseResult;
+            }
             offsetInPacket += newResource->getSize();
         }
 
-        if (newGenResource->m_NameLength == 0 || offsetInPacket > m_DataLen) {
-            // Parse packet failed, DNS resource name failed to decode or is out of bounds. Probably a bad packet
+        if (offsetInPacket > m_DataLen) {
+            // Parse packet failed, resource size overruns the packet. Probably a bad packet.
             delete newGenResource;
             m_ResourcesParsed = true;
             m_ResourcesParseResult = false;
