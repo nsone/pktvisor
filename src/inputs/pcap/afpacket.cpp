@@ -4,6 +4,7 @@
 
 #ifdef __linux__
 #include "afpacket.h"
+#include "PcapInputStream.h"
 
 #include "utils.h"
 #include <pcapplusplus/Packet.h>
