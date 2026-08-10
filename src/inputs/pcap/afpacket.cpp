@@ -73,14 +73,16 @@ void AFPacket::walk_block(struct block_desc *pbd)
 {
     int num_pkts = pbd->h1.num_pkts, i;
     struct tpacket3_hdr *ppd;
+    timespec ts{pbd->h1.ts_last_pkt.ts_sec, pbd->h1.ts_last_pkt.ts_nsec};
 
     ppd = reinterpret_cast<struct tpacket3_hdr *>(reinterpret_cast<uint8_t *>(pbd) + pbd->h1.offset_to_first_pkt);
     for (i = 0; i < num_pkts; ++i) {
-
         auto data_pointer = reinterpret_cast<uint8_t *>(ppd) + ppd->tp_mac;
-        pcpp::RawPacket packet(data_pointer, ppd->tp_snaplen, timespec{pbd->h1.ts_last_pkt.ts_sec, pbd->h1.ts_last_pkt.ts_nsec},
-            false, pcpp::LINKTYPE_ETHERNET);
-        cb(&packet, nullptr, inputStream);
+        // Enqueue a copy of the raw frame bytes into each proxy's SPSC queue
+        // and return immediately. The ring block is flushed back to the kernel
+        // in start_capture() right after walk_block() returns, decoupling ring
+        // drain latency from handler processing time.
+        inputStream->enqueue_packet(data_pointer, ppd->tp_snaplen, ts);
 
         ppd = reinterpret_cast<struct tpacket3_hdr *>(reinterpret_cast<uint8_t *>(ppd) + ppd->tp_next_offset);
     }

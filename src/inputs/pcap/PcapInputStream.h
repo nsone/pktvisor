@@ -26,10 +26,12 @@
 #pragma GCC diagnostic pop
 #endif
 #include "PcapException.h"
+#include "SPSCQueue.h"
 #include "VisorLRUList.h"
 #include "utils.h"
 #include <functional>
 #include <memory>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 #ifdef __linux__
@@ -164,11 +166,27 @@ public:
 
     // public methods that can be called from a static callback method via cookie, required by PcapPlusPlus
     void process_raw_packet(pcpp::RawPacket *rawPacket);
+
+#ifdef __linux__
+    // Called by AFPacket::walk_block — enqueues a copy of the raw frame bytes
+    // into each proxy's SPSC queue so the capture thread returns immediately.
+    void enqueue_packet(const uint8_t *data, uint32_t snaplen, timespec ts);
+#endif
     void process_pcap_stats(const pcpp::IPcapDevice::PcapStats &stats);
     void tcp_message_ready(int8_t side, const pcpp::TcpStreamData &tcpData);
     void tcp_connection_start(const pcpp::ConnectionData &connectionData);
     void tcp_connection_end(const pcpp::ConnectionData &connectionData, pcpp::TcpReassembly::ConnectionEndReason reason);
 };
+
+// Packet copy held in the per-proxy SPSC queue between the capture thread and
+// the dispatch thread.
+struct QueuedPacket {
+    std::vector<uint8_t> data;
+    uint32_t snaplen;
+    timespec ts;
+};
+
+static constexpr size_t PROXY_QUEUE_CAPACITY = 4096; // must be power of two
 
 class PcapInputEventProxy : public visor::InputEventProxy
 {
@@ -191,6 +209,20 @@ private:
     mutable std::shared_mutex _pcap_proxy_mutex;
     std::shared_ptr<spdlog::logger> _logger;
 
+#ifdef __linux__
+    // Decoupled dispatch for AF_PACKET source: the capture thread enqueues raw
+    // frames here; a dedicated dispatch thread drains the queue and calls
+    // process_raw_packet() so the ring buffer is returned to the kernel
+    // immediately.
+    std::unique_ptr<SPSCQueue<QueuedPacket>> _packet_queue;
+    std::unique_ptr<std::thread> _dispatch_thread;
+    std::atomic<bool> _dispatch_running{false};
+    // Owning stream — needed by the dispatch thread to call process_raw_packet.
+    PcapInputStream *_input_stream{nullptr};
+    // Dropped-packet counter (queue full).
+    std::atomic<uint64_t> _queue_drops{0};
+#endif
+
 public:
     PcapInputEventProxy(const std::string &name, const Configurable &filter)
         : InputEventProxy(name, filter)
@@ -199,7 +231,14 @@ public:
         assert(_logger);
     }
 
-    ~PcapInputEventProxy() = default;
+    ~PcapInputEventProxy();
+
+#ifdef __linux__
+    void start_dispatch(PcapInputStream *stream);
+    void stop_dispatch();
+    bool enqueue(QueuedPacket &&pkt);
+    uint64_t queue_drops() const { return _queue_drops.load(std::memory_order_relaxed); }
+#endif
 
     size_t consumer_count() const override
     {

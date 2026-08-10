@@ -85,6 +85,64 @@ PcapInputStream::~PcapInputStream()
 {
 }
 
+// ---------------------------------------------------------------------------
+// PcapInputEventProxy
+// ---------------------------------------------------------------------------
+
+PcapInputEventProxy::~PcapInputEventProxy()
+{
+#ifdef __linux__
+    stop_dispatch();
+#endif
+}
+
+#ifdef __linux__
+void PcapInputEventProxy::start_dispatch(PcapInputStream *stream)
+{
+    _input_stream = stream;
+    _packet_queue = std::make_unique<SPSCQueue<QueuedPacket>>(PROXY_QUEUE_CAPACITY);
+    _dispatch_running = true;
+    _dispatch_thread = std::make_unique<std::thread>([this] {
+        QueuedPacket pkt;
+        while (true) {
+            if (_packet_queue->try_pop(pkt)) {
+                pcpp::RawPacket raw(pkt.data.data(), pkt.snaplen, pkt.ts,
+                    false, pcpp::LINKTYPE_ETHERNET);
+                _input_stream->process_raw_packet(&raw);
+            } else if (!_dispatch_running) {
+                // Drain any final items before exiting.
+                if (!_packet_queue->try_pop(pkt)) {
+                    break;
+                }
+                pcpp::RawPacket raw(pkt.data.data(), pkt.snaplen, pkt.ts,
+                    false, pcpp::LINKTYPE_ETHERNET);
+                _input_stream->process_raw_packet(&raw);
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    });
+}
+
+void PcapInputEventProxy::stop_dispatch()
+{
+    _dispatch_running = false;
+    if (_dispatch_thread && _dispatch_thread->joinable()) {
+        _dispatch_thread->join();
+        _dispatch_thread.reset();
+    }
+}
+
+bool PcapInputEventProxy::enqueue(QueuedPacket &&pkt)
+{
+    if (!_packet_queue || !_packet_queue->try_push(std::move(pkt))) {
+        _queue_drops.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    return true;
+}
+#endif
+
 void PcapInputStream::start()
 {
 
@@ -237,6 +295,12 @@ void PcapInputStream::stop()
 #ifdef __linux__
     if (_af_device) {
         _af_device->stop_capture();
+        // Stop dispatch threads after the capture thread exits so no new
+        // packets arrive after the queues are drained.
+        std::shared_lock lock(_input_mutex);
+        for (auto &proxy : _event_proxies) {
+            static_cast<PcapInputEventProxy *>(proxy.get())->stop_dispatch();
+        }
     }
 #endif
 
@@ -533,9 +597,40 @@ void PcapInputStream::_open_af_packet_iface(const std::string &iface, const std:
     if (config_exists("af_packet_num_blocks")) {
         num_blocks = static_cast<unsigned int>(config_get<uint64_t>("af_packet_num_blocks"));
     }
+    // Start a dispatch thread for each proxy before opening the socket so
+    // threads are ready as soon as the first packets arrive.
+    {
+        std::shared_lock lock(_input_mutex);
+        for (auto &proxy : _event_proxies) {
+            static_cast<PcapInputEventProxy *>(proxy.get())->start_dispatch(this);
+        }
+    }
     _af_device = std::make_unique<AFPacket>(this, _packet_arrives_cb, bpfFilter, iface,
         /*fanout_group_id=*/-1, /*block_size=*/1 << 22, /*frame_size=*/1 << 11, num_blocks);
     _af_device->start_capture();
+}
+
+void PcapInputStream::enqueue_packet(const uint8_t *data, uint32_t snaplen, timespec ts)
+{
+    std::shared_lock lock(_input_mutex);
+    if (_event_proxies.empty()) {
+        return;
+    }
+    // Build the packet copy once; move it into the last proxy to avoid one
+    // extra vector allocation when there is only one proxy.
+    QueuedPacket pkt;
+    pkt.data.assign(data, data + snaplen);
+    pkt.snaplen = snaplen;
+    pkt.ts = ts;
+    for (size_t i = 0; i < _event_proxies.size(); ++i) {
+        auto *proxy = static_cast<PcapInputEventProxy *>(_event_proxies[i].get());
+        if (i + 1 == _event_proxies.size()) {
+            proxy->enqueue(std::move(pkt));
+        } else {
+            QueuedPacket copy = pkt;
+            proxy->enqueue(std::move(copy));
+        }
+    }
 }
 #endif
 
