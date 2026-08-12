@@ -4,7 +4,6 @@
 
 #include "DnsStreamHandler.h"
 #include "HandlerModulePlugin.h"
-#include "utils.h"
 #include <Corrade/Utility/Debug.h>
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -1036,6 +1035,11 @@ void DnsMetricsBucket::new_dns_transaction(bool deep, float per90th, DnsLayer &p
     if (query) {
 
         auto name = std::string(query->getNameLower());
+
+        // skip malformed names to prevent heap corruption.
+        if (name.size() > 253) {
+            return;
+        }
 
         if (group_enabled(group::DnsMetrics::Cardinality)) {
             data.qnameCard.update(name);

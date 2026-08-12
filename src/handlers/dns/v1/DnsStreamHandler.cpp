@@ -4,7 +4,6 @@
 
 #include "DnsStreamHandler.h"
 #include "HandlerModulePlugin.h"
-#include "utils.h"
 #include <Corrade/Utility/Debug.h>
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -991,6 +990,11 @@ void DnsMetricsBucket::process_dns_layer(bool deep, DnsLayer &payload, pcpp::Pro
 
         auto name = std::string(query->getNameLower());
 
+        // skip malformed names to prevent heap corruption.
+        if (name.size() > 253) {
+            return;
+        }
+
         if (group_enabled(group::DnsMetrics::Cardinality)) {
             _dns_qnameCard.update(name);
         }
@@ -1130,6 +1134,10 @@ void DnsMetricsBucket::new_dns_transaction(bool deep, float to90th, float from90
         auto query = dns.getFirstQuery();
         if (query) {
             auto name = std::string(query->getName());
+            // RFC 1035 §2.3.4: skip malformed names to prevent heap corruption.
+            if (name.size() > 253) {
+                return;
+            }
             // dir is the direction of the last packet, meaning the reply so from a transaction perspective
             // we look at it from the direction of the query, so the opposite side than we have here
             if (dir == PacketDirection::toHost && from90th > 0 && xactTime >= from90th) {

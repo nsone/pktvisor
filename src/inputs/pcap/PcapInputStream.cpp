@@ -744,7 +744,17 @@ void PcapInputStream::info_json(json &j) const
 
 std::unique_ptr<InputEventProxy> PcapInputStream::create_event_proxy(const Configurable &filter)
 {
-    return std::make_unique<PcapInputEventProxy>(_name, filter);
+    auto proxy = std::make_unique<PcapInputEventProxy>(_name, filter);
+#ifdef __linux__
+    // If the AF_PACKET device is already capturing, the new proxy is being
+    // added by a late-arriving policy. Start its dispatch thread immediately
+    // so packets are forwarded to it.  add_event_proxy() calls us while
+    // holding a unique_lock on _input_mutex, so _af_device is stable here.
+    if (_af_device) {
+        proxy->start_dispatch(this);
+    }
+#endif
+    return proxy;
 }
 
 void PcapInputStream::parse_host_spec()
