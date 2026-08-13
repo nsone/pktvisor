@@ -272,6 +272,34 @@ TEST_CASE("RFC 9267 §3 — label length validation", "[dns][rfc9267]")
     }
 }
 
+TEST_CASE("truncated RDATA is rejected", "[dns]")
+{
+    // Build a response with ANCOUNT=1 whose RDLENGTH claims more bytes than the packet contains.
+    // Before the fix, getSize() read the out-of-bounds RDATA and crashed; now it must return false.
+    constexpr size_t pktLen = 12 + 6 + 10 + 2; // header + qname("a\0"+QTYPE+QCLASS) + answer fixed fields + 2 rdata bytes
+    auto pkt = std::make_unique<uint8_t[]>(pktLen);
+    memset(pkt.get(), 0, pktLen);
+    // header: QR=1, QDCOUNT=1, ANCOUNT=1
+    pkt[0] = 0x00; pkt[1] = 0x01;
+    pkt[2] = 0x80;                        // QR=response
+    pkt[4] = 0x00; pkt[5] = 0x01;         // QDCOUNT=1
+    pkt[6] = 0x00; pkt[7] = 0x01;         // ANCOUNT=1
+    // QNAME: single label "a" (0x01 'a' 0x00) + QTYPE A + QCLASS IN
+    size_t off = 12;
+    pkt[off++] = 0x01; pkt[off++] = 'a'; pkt[off++] = 0x00;
+    pkt[off++] = 0x00; pkt[off++] = 0x01; // QTYPE
+    pkt[off++] = 0x00; pkt[off++] = 0x01; // QCLASS
+    // Answer: NAME=ptr to offset 12, TYPE=A, CLASS=IN, TTL=0, RDLENGTH=100 (truncated — only 2 bytes present)
+    pkt[off++] = 0xC0; pkt[off++] = 0x0C; // compression pointer
+    pkt[off++] = 0x00; pkt[off++] = 0x01; // TYPE A
+    pkt[off++] = 0x00; pkt[off++] = 0x01; // CLASS IN
+    pkt[off++] = 0x00; pkt[off++] = 0x00; pkt[off++] = 0x00; pkt[off++] = 0x00; // TTL
+    pkt[off++] = 0x00; pkt[off++] = 0x64; // RDLENGTH=100 (but only 2 bytes follow, which don't exist)
+
+    DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
+    CHECK(layer.parseResources(false, true, true) == false);
+}
+
 // ---------------------------------------------------------------------------
 // parse_additional_records_ecs — stack-overflow regression (CVE-class fix)
 //

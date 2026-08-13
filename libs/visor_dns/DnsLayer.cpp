@@ -229,11 +229,18 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
                 m_ResourcesParseResult = false;
                 return m_ResourcesParseResult;
             }
+            uint16_t rdataLen;
+            memcpy(&rdataLen, m_Data + offsetInPacket + newResource->m_NameLength + 8, sizeof(rdataLen));
+            if (offsetInPacket + newResource->m_NameLength + 10 + be16toh(rdataLen) > m_DataLen) {
+                delete newGenResource;
+                m_ResourcesParsed = true;
+                m_ResourcesParseResult = false;
+                return m_ResourcesParseResult;
+            }
             offsetInPacket += newResource->getSize();
         }
 
         if (offsetInPacket > m_DataLen) {
-            // Parse packet failed, resource size overruns the packet. Probably a bad packet.
             delete newGenResource;
             m_ResourcesParsed = true;
             m_ResourcesParseResult = false;
