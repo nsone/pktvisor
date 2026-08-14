@@ -324,8 +324,8 @@ void IDnsResource::setDnsLayer(DnsLayer *dnsLayer, size_t offsetInLayer)
 
 std::basic_string_view<uint8_t> IDnsResource::getRawName() const
 {
-    if (m_NameLength == 0 || m_DnsLayer == nullptr) {
-        // malformed name or detached resource (constructed via emptyRawData path)
+    if (m_NameLength == 0 || m_DnsLayer == nullptr || m_DnsLayer->m_Data == nullptr
+        || m_OffsetInLayer >= m_DnsLayer->m_DataLen) {
         return {};
     }
     // scan starts at the domain name
