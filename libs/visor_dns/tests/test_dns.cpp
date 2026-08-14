@@ -276,7 +276,7 @@ TEST_CASE("truncated RDATA is rejected", "[dns]")
 {
     // Build a response with ANCOUNT=1 whose RDLENGTH claims more bytes than the packet contains.
     // Before the fix, getSize() read the out-of-bounds RDATA and crashed; now it must return false.
-    constexpr size_t pktLen = 12 + 6 + 10 + 2; // header + qname("a\0"+QTYPE+QCLASS) + answer fixed fields + 2 rdata bytes
+    constexpr size_t pktLen = 12 + 7 + 12; // header + qname(1+'a'+0+QTYPE+QCLASS) + answer(ptr+TYPE+CLASS+TTL+RDLENGTH)
     auto pkt = std::make_unique<uint8_t[]>(pktLen);
     memset(pkt.get(), 0, pktLen);
     // header: QR=1, QDCOUNT=1, ANCOUNT=1
