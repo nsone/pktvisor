@@ -1,8 +1,7 @@
 name: Debug Builds
 
 on:
-  push:
-    branches: [ develop, master, release/** ]
+  workflow_dispatch:
 
 env:
   CTEST_OUTPUT_ON_FAILURE: 1
