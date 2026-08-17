@@ -177,8 +177,11 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
                 log_err("label length exceeds RFC 1035 maximum of 63");
                 return 0;
             }
-            // return if next word would be outside of the DNS layer or overflow the buffer behind resultPtr
-            if (curOffsetInLayer + wordLength + 1 > m_DnsLayer->m_DataLen || encodedNameLength + wordLength >= 255) {
+            // return if next word would be outside of the DNS layer or overflow the decoded
+            // result buffer (result is char[256], so resultPtr must never advance past
+            // result+254 before the trailing dot/NULL).
+            if (curOffsetInLayer + wordLength + 1 > m_DnsLayer->m_DataLen
+                || decodedNameLength + wordLength + 1 >= 255) {
                 log_err("label out-of-bounds or name too long");
                 return 0;
             }

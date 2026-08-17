@@ -182,6 +182,15 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         return m_ResourcesParseResult;
     }
 
+    // Each resource needs at minimum 1 byte (null label) + 4 bytes (type+class) = 5 bytes.
+    // If the declared count exceeds what could physically fit, reject immediately.
+    if (numOfOtherResources > 0 &&
+        m_DataLen - offsetInPacket < static_cast<size_t>(numOfOtherResources) * 5) {
+        m_ResourcesParsed = true;
+        m_ResourcesParseResult = false;
+        return m_ResourcesParseResult;
+    }
+
     for (uint32_t i = 0; i < numOfOtherResources; i++) {
         DnsResourceType resType;
         if (numOfQuestions > 0) {
@@ -213,6 +222,13 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             newQuery = new DnsQuery(this, offsetInPacket);
             newGenResource = newQuery;
             if (newQuery->m_NameLength == 0) {
+                delete newGenResource;
+                m_ResourcesParsed = true;
+                m_ResourcesParseResult = false;
+                return m_ResourcesParseResult;
+            }
+            // Verify the query record fits: name + 4 bytes (QTYPE + QCLASS).
+            if (offsetInPacket + newQuery->m_NameLength + 4 > m_DataLen) {
                 delete newGenResource;
                 m_ResourcesParsed = true;
                 m_ResourcesParseResult = false;
