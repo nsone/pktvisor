@@ -248,7 +248,7 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             uint16_t rdataLen;
             memcpy(&rdataLen, m_Data + offsetInPacket + newResource->m_NameLength + 8, sizeof(rdataLen));
             size_t resourceSize = newResource->m_NameLength + 3 * sizeof(uint16_t) + sizeof(uint32_t) + be16toh(rdataLen);
-            if (offsetInPacket + resourceSize > m_DataLen) {
+            if (resourceSize < newResource->m_NameLength || offsetInPacket > m_DataLen - resourceSize) {
                 delete newGenResource;
                 m_ResourcesParsed = true;
                 m_ResourcesParseResult = false;

@@ -346,6 +346,35 @@ TEST_CASE("truncated compressed resource data name is rejected without crash", "
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     CHECK(layer.parseResources(false, false, true) == false);
 }
+TEST_CASE("oversized RDLENGTH does not overflow resource size calculation", "[dns]")
+{
+    // Response with one question and one answer. The answer declares a maximal
+    // RDLENGTH so resourceSize arithmetic must fail cleanly instead of wrapping.
+    constexpr size_t pktLen = 12 + 7 + 12;
+    auto pkt = std::make_unique<uint8_t[]>(pktLen);
+    memset(pkt.get(), 0, pktLen);
+
+    pkt[0] = 0x00; pkt[1] = 0x01;
+    pkt[2] = 0x80;
+    pkt[4] = 0x00; pkt[5] = 0x01;
+    pkt[6] = 0x00; pkt[7] = 0x01;
+
+    size_t off = 12;
+    pkt[off++] = 0x01; pkt[off++] = 'a'; pkt[off++] = 0x00;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+
+    pkt[off++] = 0xC0; pkt[off++] = 0x0C;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+    pkt[off++] = 0x00; pkt[off++] = 0x00; pkt[off++] = 0x00; pkt[off++] = 0x00;
+    pkt[off++] = 0xFF; pkt[off++] = 0xFF;
+
+    DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
+    CHECK(layer.parseResources(false, false, true) == false);
+}
+
+
 
 
 // ---------------------------------------------------------------------------
