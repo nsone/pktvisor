@@ -247,13 +247,14 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             }
             uint16_t rdataLen;
             memcpy(&rdataLen, m_Data + offsetInPacket + newResource->m_NameLength + 8, sizeof(rdataLen));
-            if (offsetInPacket + newResource->m_NameLength + 10 + be16toh(rdataLen) > m_DataLen) {
+            size_t resourceSize = newResource->m_NameLength + 3 * sizeof(uint16_t) + sizeof(uint32_t) + be16toh(rdataLen);
+            if (offsetInPacket + resourceSize > m_DataLen) {
                 delete newGenResource;
                 m_ResourcesParsed = true;
                 m_ResourcesParseResult = false;
                 return m_ResourcesParseResult;
             }
-            offsetInPacket += newResource->getSize();
+            offsetInPacket += resourceSize;
         }
 
         if (offsetInPacket > m_DataLen) {
