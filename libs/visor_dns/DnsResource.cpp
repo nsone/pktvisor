@@ -61,7 +61,9 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
     // Uses snprintf into a stack buffer — no heap allocation, no fmt::format.
     char _err_buf[192];
     auto log_err = [&](const char *msg) {
-        if (m_DnsLayer->m_DataLen < sizeof(dnshdr)) {
+        if (m_DnsLayer == nullptr || m_DnsLayer->m_Data == nullptr) {
+            snprintf(_err_buf, sizeof(_err_buf), "decodeName: %s; dns_hdr: <null dns layer>", msg);
+        } else if (m_DnsLayer->m_DataLen < sizeof(dnshdr)) {
             snprintf(_err_buf, sizeof(_err_buf), "decodeName: %s; dns_hdr: <too short>", msg);
         } else {
             const auto *hdr = m_DnsLayer->getDnsHeader();
@@ -105,6 +107,11 @@ size_t IDnsResource::decodeName(const char *encodedName, char *result, int itera
         }
         PCPP_LOG_ERROR(_err_buf);
     };
+
+    if (m_DnsLayer == nullptr || m_DnsLayer->m_Data == nullptr) {
+        log_err("null dns layer");
+        return 0;
+    }
 
     size_t curOffsetInLayer = (uint8_t *)encodedName - m_DnsLayer->m_Data;
     if (curOffsetInLayer >= m_DnsLayer->m_DataLen) {

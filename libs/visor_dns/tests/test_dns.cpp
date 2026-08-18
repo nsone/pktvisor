@@ -300,6 +300,22 @@ TEST_CASE("truncated RDATA is rejected", "[dns]")
     CHECK(layer.parseResources(false, true, true) == false);
 }
 
+TEST_CASE("forced reparse after malformed query does not crash on cleanup", "[dns]")
+{
+    // Build a packet with QDCOUNT=1 and a query name offset already past the end
+    // of the DNS payload. parseResources() should fail cleanly, and a forced reparse
+    // must not crash while cleaning up partially constructed state.
+    constexpr size_t pktLen = 12;
+    auto pkt = std::make_unique<uint8_t[]>(pktLen);
+    memset(pkt.get(), 0, pktLen);
+    write_dns_header(pkt.get());
+
+    DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
+    CHECK(layer.parseResources(false, false, true) == false);
+    CHECK(layer.parseResources(false, false, true) == false);
+}
+
+
 // ---------------------------------------------------------------------------
 // parse_additional_records_ecs — stack-overflow regression (CVE-class fix)
 //
