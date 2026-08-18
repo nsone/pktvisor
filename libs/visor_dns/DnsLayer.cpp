@@ -228,7 +228,8 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
                 return m_ResourcesParseResult;
             }
             // Verify the query record fits: name + 4 bytes (QTYPE + QCLASS).
-            if (offsetInPacket + newQuery->m_NameLength + 4 > m_DataLen) {
+            if (offsetInPacket > m_DataLen || newQuery->m_NameLength > m_DataLen - offsetInPacket
+                || m_DataLen - offsetInPacket - newQuery->m_NameLength < 4) {
                 delete newGenResource;
                 m_ResourcesParsed = true;
                 m_ResourcesParseResult = false;
@@ -238,8 +239,9 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         } else {
             newResource = new DnsResource(this, offsetInPacket, resType);
             newGenResource = newResource;
-            if (newResource->m_NameLength == 0 ||
-                offsetInPacket + newResource->m_NameLength + 10 > m_DataLen) {
+            if (newResource->m_NameLength == 0 || offsetInPacket > m_DataLen
+                || newResource->m_NameLength > m_DataLen - offsetInPacket
+                || m_DataLen - offsetInPacket - newResource->m_NameLength < 10) {
                 delete newGenResource;
                 m_ResourcesParsed = true;
                 m_ResourcesParseResult = false;

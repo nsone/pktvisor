@@ -373,6 +373,32 @@ TEST_CASE("oversized RDLENGTH does not overflow resource size calculation", "[dn
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     CHECK(layer.parseResources(false, false, true) == false);
 }
+TEST_CASE("fixed-field bounds checks do not overflow on malformed resource headers", "[dns]")
+{
+    // Response with one question and one answer. The answer header is truncated
+    // immediately after the owner name so fixed-field size validation must fail
+    // without overflowing the size arithmetic in parseResources().
+    constexpr size_t pktLen = 12 + 7 + 2;
+    auto pkt = std::make_unique<uint8_t[]>(pktLen);
+    memset(pkt.get(), 0, pktLen);
+
+    pkt[0] = 0x00; pkt[1] = 0x01;
+    pkt[2] = 0x80;
+    pkt[4] = 0x00; pkt[5] = 0x01;
+    pkt[6] = 0x00; pkt[7] = 0x01;
+
+    size_t off = 12;
+    pkt[off++] = 0x01; pkt[off++] = 'a'; pkt[off++] = 0x00;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+    pkt[off++] = 0x00; pkt[off++] = 0x01;
+
+    pkt[off++] = 0xC0; pkt[off++] = 0x0C;
+
+    DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
+    CHECK(layer.parseResources(false, false, true) == false);
+}
+
+
 
 
 
