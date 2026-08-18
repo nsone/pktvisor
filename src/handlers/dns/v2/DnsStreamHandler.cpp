@@ -287,7 +287,9 @@ void DnsStreamHandler::process_udp_packet_cb(pcpp::Packet &payload, PacketDirect
             _cached_dns_layer.timestamp = stamp;
             // Construct DnsLayer in-place; Layer(const Layer&) deep-copies m_Data so the
             // cached object owns its bytes independently of the pcap ring buffer.
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(udpLayer, &payload));
+            { const DnsLayer _tmp_layer(udpLayer, &payload);
+
+              _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(_tmp_layer); }
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
@@ -323,7 +325,9 @@ void DnsStreamHandler::process_tcp_reassembled_packet_cb(pcpp::Packet &payload, 
             _cached_dns_layer.timestamp = stamp;
             // Construct DnsLayer in-place; Layer(const Layer&) deep-copies m_Data so the
             // cached object owns its bytes independently of the pcap ring buffer.
-            _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(DnsLayer(tcpLayer, &payload));
+            { const DnsLayer _tmp_layer(tcpLayer, &payload);
+
+              _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(_tmp_layer); }
         }
         auto dnsLayer = _cached_dns_layer.dnsLayer.get();
         if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
