@@ -141,6 +141,14 @@ struct dnshdr {
 		DnsLayer(const DnsLayer& other);
 
 		/**
+		 * Move construction is deleted: resource list nodes back-reference their parent
+		 * DnsLayer by raw pointer; moving would leave them dangling after the temporary
+		 * is destroyed. Callers must use copy construction.
+		 */
+		DnsLayer(DnsLayer&&) = delete;
+		DnsLayer& operator=(DnsLayer&&) = delete;
+
+		/**
 		 * An assignment operator for this layer
 		 */
 		DnsLayer& operator=(const DnsLayer& other);
