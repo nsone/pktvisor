@@ -23,11 +23,13 @@ IDnsResource::IDnsResource(DnsLayer *dnsLayer, size_t offsetInLayer)
 {
     char decodedName[256];
     m_NameLength = decodeName((const char *)getRawData(), decodedName);
-    if (m_NameLength > 0) {
+    if (m_NameLength > 0 && decodedName[0] != '\0') {
         m_DecodedName = decodedName;
         m_DecodedNameLower = m_DecodedName;
         std::transform(m_DecodedNameLower.begin(), m_DecodedNameLower.end(), m_DecodedNameLower.begin(),
             [](unsigned char c) { return std::tolower(c); });
+    } else {
+        m_NameLength = 0;
     }
 }
 

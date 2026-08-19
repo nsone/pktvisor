@@ -137,26 +137,23 @@ bool DnsLayer::shortenLayer(int offsetInLayer, size_t numOfBytesToShorten, IDnsR
 
 bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forceParse)
 {
-    auto clear_resources = [&]() {
-        IDnsResource *cur = m_ResourceList;
+    auto clear_resource_list = [](IDnsResource *resourceList) {
+        IDnsResource *cur = resourceList;
         while (cur != NULL) {
             IDnsResource *next = cur->getNextResource();
             delete cur;
             cur = next;
         }
+    };
+
+    auto clear_resources = [&]() {
+        clear_resource_list(m_ResourceList);
         m_ResourceList = NULL;
         m_FirstQuery = NULL;
         m_FirstAnswer = NULL;
         m_FirstAuthority = NULL;
         m_FirstAdditional = NULL;
         m_ResourcesParsed = false;
-    };
-
-    auto fail_parse = [&]() {
-        clear_resources();
-        m_ResourcesParsed = true;
-        m_ResourcesParseResult = false;
-        return m_ResourcesParseResult;
     };
 
     if (m_ResourcesParsed && !forceParse) {
@@ -170,11 +167,27 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
 
     // Reject payloads that are too short to contain a valid DNS header.
     if (m_DataLen < sizeof(dnshdr)) {
-        return fail_parse();
+        clear_resources();
+        m_ResourcesParsed = true;
+        m_ResourcesParseResult = false;
+        return m_ResourcesParseResult;
     }
 
     size_t offsetInPacket = sizeof(dnshdr);
-    IDnsResource *curResource = m_ResourceList;
+    IDnsResource *localResourceList = NULL;
+    IDnsResource *curResource = NULL;
+    DnsQuery *localFirstQuery = NULL;
+    DnsResource *localFirstAnswer = NULL;
+    DnsResource *localFirstAuthority = NULL;
+    DnsResource *localFirstAdditional = NULL;
+
+    auto fail_parse = [&]() {
+        clear_resource_list(localResourceList);
+        clear_resources();
+        m_ResourcesParsed = true;
+        m_ResourcesParseResult = false;
+        return m_ResourcesParseResult;
+    };
 
     uint16_t numOfQuestions = be16toh(getDnsHeader()->numberOfQuestions);
     uint16_t numOfAnswers = be16toh(getDnsHeader()->numberOfAnswers);
@@ -265,9 +278,9 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         }
 
         // this resource is the first resource
-        if (m_ResourceList == NULL) {
-            m_ResourceList = newGenResource;
-            curResource = m_ResourceList;
+        if (localResourceList == NULL) {
+            localResourceList = newGenResource;
+            curResource = localResourceList;
         } else {
             if (curResource == NULL) {
                 delete newGenResource;
@@ -277,23 +290,29 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             curResource = curResource->getNextResource();
         }
 
-        if (resType == DnsQueryType && m_FirstQuery == NULL) {
-            m_FirstQuery = newQuery;
+        if (resType == DnsQueryType && localFirstQuery == NULL) {
+            localFirstQuery = newQuery;
             if (queryOnly) {
                 break;
             }
-        } else if (resType == DnsAnswerType && m_FirstAnswer == NULL)
-            m_FirstAnswer = newResource;
-        else if (resType == DnsAuthorityType && m_FirstAuthority == NULL)
-            m_FirstAuthority = newResource;
-        else if (resType == DnsAdditionalType && m_FirstAdditional == NULL) {
-            m_FirstAdditional = newResource;
+        } else if (resType == DnsAnswerType && localFirstAnswer == NULL)
+            localFirstAnswer = newResource;
+        else if (resType == DnsAuthorityType && localFirstAuthority == NULL)
+            localFirstAuthority = newResource;
+        else if (resType == DnsAdditionalType && localFirstAdditional == NULL) {
+            localFirstAdditional = newResource;
             if (additionalOnly) {
                 break;
             }
         }
     }
 
+    clear_resources();
+    m_ResourceList = localResourceList;
+    m_FirstQuery = localFirstQuery;
+    m_FirstAnswer = localFirstAnswer;
+    m_FirstAuthority = localFirstAuthority;
+    m_FirstAdditional = localFirstAdditional;
     m_ResourcesParsed = true;
     m_ResourcesParseResult = true;
     return m_ResourcesParseResult;
