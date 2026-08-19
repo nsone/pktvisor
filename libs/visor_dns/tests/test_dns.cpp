@@ -467,7 +467,7 @@ TEST_CASE("parse failure clears partially built resource list", "[dns]")
     CHECK(layer.parseResources(false, false, true) == false);
 }
 
-TEST_CASE("empty decoded name is rejected during resource construction", "[dns]")
+TEST_CASE("root query names parse successfully", "[dns]")
 {
     constexpr size_t pktLen = 17;
     auto pkt = std::make_unique<uint8_t[]>(pktLen);
@@ -479,27 +479,28 @@ TEST_CASE("empty decoded name is rejected during resource construction", "[dns]"
     pkt[15] = 0x00; pkt[16] = 0x01;
 
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
-    CHECK(layer.parseResources(true, false, true) == false);
-    CHECK(layer.getFirstQuery() == nullptr);
+    CHECK(layer.parseResources(true, false, true) == true);
+    REQUIRE(layer.getFirstQuery() != nullptr);
+    CHECK(layer.getFirstQuery()->getName().empty());
 }
 
-TEST_CASE("parseResources enforces monotonic offset progress", "[dns]")
+TEST_CASE("parseResources rejects truncated second query after a root query", "[dns]")
 {
-    constexpr size_t pktLen = 26;
+    constexpr size_t pktLen = 24;
     auto pkt = std::make_unique<uint8_t[]>(pktLen);
     memset(pkt.get(), 0, pktLen);
     write_dns_header(pkt.get(), 2);
 
-    pkt[12] = 0x01; pkt[13] = 'a'; pkt[14] = 0x00;
+    pkt[12] = 0x00;
+    pkt[13] = 0x00; pkt[14] = 0x01;
     pkt[15] = 0x00; pkt[16] = 0x01;
-    pkt[17] = 0x00; pkt[18] = 0x01;
 
-    pkt[19] = 0x00;
+    pkt[17] = 0x01; pkt[18] = 'a'; pkt[19] = 0x00;
     pkt[20] = 0x00; pkt[21] = 0x01;
-    pkt[22] = 0x00; pkt[23] = 0x01;
-    pkt[24] = 0x00; pkt[25] = 0x00;
+    pkt[22] = 0x00;
+    pkt[23] = 0x01;
 
-    DnsLayer layer(pkt.release(), 24, nullptr, nullptr);
+    DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     CHECK(layer.parseResources(false, false, true) == false);
 }
 

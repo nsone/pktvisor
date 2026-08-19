@@ -23,7 +23,9 @@ IDnsResource::IDnsResource(DnsLayer *dnsLayer, size_t offsetInLayer)
 {
     char decodedName[256];
     m_NameLength = decodeName((const char *)getRawData(), decodedName);
-    if (m_NameLength > 0) {
+    if (m_NameLength > 0 && m_DnsLayer != nullptr && m_DnsLayer->m_Data != nullptr
+        && m_OffsetInLayer < m_DnsLayer->m_DataLen
+        && m_NameLength <= m_DnsLayer->m_DataLen - m_OffsetInLayer) {
         m_DecodedName = decodedName;
         m_DecodedNameLower = m_DecodedName;
         std::transform(m_DecodedNameLower.begin(), m_DecodedNameLower.end(), m_DecodedNameLower.begin(),
