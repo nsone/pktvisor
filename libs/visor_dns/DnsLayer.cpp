@@ -271,6 +271,12 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             m_ResourceList = newGenResource;
             curResource = m_ResourceList;
         } else {
+            if (curResource == NULL) {
+                delete newGenResource;
+                m_ResourcesParsed = true;
+                m_ResourcesParseResult = false;
+                return m_ResourcesParseResult;
+            }
             curResource->setNexResource(newGenResource);
             curResource = curResource->getNextResource();
         }
