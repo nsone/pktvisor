@@ -486,7 +486,7 @@ TEST_CASE("root query names parse successfully", "[dns]")
 
 TEST_CASE("parseResources rejects truncated second query after a root query", "[dns]")
 {
-    constexpr size_t pktLen = 24;
+    constexpr size_t pktLen = 23;
     auto pkt = std::make_unique<uint8_t[]>(pktLen);
     memset(pkt.get(), 0, pktLen);
     write_dns_header(pkt.get(), 2);
@@ -498,7 +498,6 @@ TEST_CASE("parseResources rejects truncated second query after a root query", "[
     pkt[17] = 0x01; pkt[18] = 'a'; pkt[19] = 0x00;
     pkt[20] = 0x00; pkt[21] = 0x01;
     pkt[22] = 0x00;
-    pkt[23] = 0x01;
 
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     CHECK(layer.parseResources(false, false, true) == false);

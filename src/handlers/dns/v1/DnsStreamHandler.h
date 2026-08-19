@@ -303,7 +303,9 @@ class DnsStreamHandler final : public visor::StreamMetricsHandler<DnsMetricsMana
     struct DnsCacheData {
         uint32_t flowKey = 0;
         timespec timestamp = timespec();
-        std::unique_ptr<DnsLayer> dnsLayer;
+        const uint8_t *payloadData = nullptr;
+        size_t payloadLength = 0;
+        std::string qname;
     };
     static thread_local DnsCacheData _cached_dns_layer;
 

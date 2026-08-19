@@ -282,18 +282,23 @@ void DnsStreamHandler::process_udp_packet_cb(pcpp::Packet &payload, PacketDirect
         metric_port = dst_port;
     }
     if (metric_port) {
-        if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
+        const auto *payloadData = udpLayer->getLayerPayload();
+        const auto payloadLength = udpLayer->getLayerPayloadSize();
+        DnsLayer dnsLayer(udpLayer, &payload);
+        if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec
+            || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec
+            || payloadData != _cached_dns_layer.payloadData || payloadLength != _cached_dns_layer.payloadLength) {
             _cached_dns_layer.flowKey = flowkey;
             _cached_dns_layer.timestamp = stamp;
-            // Construct DnsLayer in-place; Layer(const Layer&) deep-copies m_Data so the
-            // cached object owns its bytes independently of the pcap ring buffer.
-            { const DnsLayer _tmp_layer(udpLayer, &payload);
-
-              _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(_tmp_layer); }
+            _cached_dns_layer.payloadData = payloadData;
+            _cached_dns_layer.payloadLength = payloadLength;
+            _cached_dns_layer.qname.clear();
+            if (dnsLayer.parseResources(true) && dnsLayer.getFirstQuery() != nullptr) {
+                _cached_dns_layer.qname = dnsLayer.getFirstQuery()->getNameLower();
+            }
         }
-        auto dnsLayer = _cached_dns_layer.dnsLayer.get();
-        if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
-            _metrics->process_dns_layer(*dnsLayer, dir, l3, pcpp::UDP, flowkey, metric_port, _static_suffix_size, stamp);
+        if (!_filtering(dnsLayer, dir, flowkey, stamp) && _configs(dnsLayer)) {
+            _metrics->process_dns_layer(dnsLayer, dir, l3, pcpp::UDP, flowkey, metric_port, _static_suffix_size, stamp);
             _static_suffix_size = 0;
             // signal for chained stream handlers, if we have any
             if (_event_proxy) {
@@ -320,18 +325,9 @@ void DnsStreamHandler::process_tcp_reassembled_packet_cb(pcpp::Packet &payload, 
         metric_port = dst_port;
     }
     if (metric_port) {
-        if (flowkey != _cached_dns_layer.flowKey || stamp.tv_sec != _cached_dns_layer.timestamp.tv_sec || stamp.tv_nsec != _cached_dns_layer.timestamp.tv_nsec) {
-            _cached_dns_layer.flowKey = flowkey;
-            _cached_dns_layer.timestamp = stamp;
-            // Construct DnsLayer in-place; Layer(const Layer&) deep-copies m_Data so the
-            // cached object owns its bytes independently of the pcap ring buffer.
-            { const DnsLayer _tmp_layer(tcpLayer, &payload);
-
-              _cached_dns_layer.dnsLayer = std::make_unique<DnsLayer>(_tmp_layer); }
-        }
-        auto dnsLayer = _cached_dns_layer.dnsLayer.get();
-        if (!_filtering(*dnsLayer, dir, flowkey, stamp) && _configs(*dnsLayer)) {
-            _metrics->process_dns_layer(*dnsLayer, dir, l3, pcpp::TCP, flowkey, metric_port, _static_suffix_size, stamp);
+        DnsLayer dnsLayer(tcpLayer, &payload);
+        if (!_filtering(dnsLayer, dir, flowkey, stamp) && _configs(dnsLayer)) {
+            _metrics->process_dns_layer(dnsLayer, dir, l3, pcpp::TCP, flowkey, metric_port, _static_suffix_size, stamp);
             _static_suffix_size = 0;
             // signal for chained stream handlers, if we have any
             if (_event_proxy) {
