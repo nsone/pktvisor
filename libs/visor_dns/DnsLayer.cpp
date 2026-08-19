@@ -138,7 +138,7 @@ bool DnsLayer::shortenLayer(int offsetInLayer, size_t numOfBytesToShorten, IDnsR
 bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forceParse)
 {
 
-    if (m_ResourcesParsed && (!forceParse || !m_ResourcesParseResult)) {
+    if (m_ResourcesParsed && !forceParse) {
         return m_ResourcesParseResult;
     }
 
