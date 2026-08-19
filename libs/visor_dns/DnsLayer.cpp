@@ -137,13 +137,7 @@ bool DnsLayer::shortenLayer(int offsetInLayer, size_t numOfBytesToShorten, IDnsR
 
 bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forceParse)
 {
-
-    if (m_ResourcesParsed && !forceParse) {
-        return m_ResourcesParseResult;
-    }
-
-    // on forced re-parse, free any previously allocated resources
-    if (forceParse && m_ResourceList != NULL) {
+    auto clear_resources = [&]() {
         IDnsResource *cur = m_ResourceList;
         while (cur != NULL) {
             IDnsResource *next = cur->getNextResource();
@@ -156,13 +150,27 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         m_FirstAuthority = NULL;
         m_FirstAdditional = NULL;
         m_ResourcesParsed = false;
+    };
+
+    auto fail_parse = [&]() {
+        clear_resources();
+        m_ResourcesParsed = true;
+        m_ResourcesParseResult = false;
+        return m_ResourcesParseResult;
+    };
+
+    if (m_ResourcesParsed && !forceParse) {
+        return m_ResourcesParseResult;
+    }
+
+    // on forced re-parse, free any previously allocated resources
+    if (forceParse && m_ResourceList != NULL) {
+        clear_resources();
     }
 
     // Reject payloads that are too short to contain a valid DNS header.
     if (m_DataLen < sizeof(dnshdr)) {
-        m_ResourcesParsed = true;
-        m_ResourcesParseResult = false;
-        return m_ResourcesParseResult;
+        return fail_parse();
     }
 
     size_t offsetInPacket = sizeof(dnshdr);
@@ -177,21 +185,18 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
 
     if (numOfOtherResources > 100) {
         // probably bad packet
-        m_ResourcesParsed = true;
-        m_ResourcesParseResult = false;
-        return m_ResourcesParseResult;
+        return fail_parse();
     }
 
     // Each resource needs at minimum 1 byte (null label) + 4 bytes (type+class) = 5 bytes.
     // If the declared count exceeds what could physically fit, reject immediately.
     if (numOfOtherResources > 0 &&
         m_DataLen - offsetInPacket < static_cast<size_t>(numOfOtherResources) * 5) {
-        m_ResourcesParsed = true;
-        m_ResourcesParseResult = false;
-        return m_ResourcesParseResult;
+        return fail_parse();
     }
 
     for (uint32_t i = 0; i < numOfOtherResources; i++) {
+        size_t prevOffsetInPacket = offsetInPacket;
         DnsResourceType resType;
         if (numOfQuestions > 0) {
             resType = DnsQueryType;
@@ -210,9 +215,7 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         // Reject before constructing if offset is already past the end of the packet.
         // This prevents the resource constructor from dereferencing an out-of-bounds offset.
         if (offsetInPacket >= m_DataLen) {
-            m_ResourcesParsed = true;
-            m_ResourcesParseResult = false;
-            return m_ResourcesParseResult;
+            return fail_parse();
         }
 
         DnsResource *newResource = NULL;
@@ -223,17 +226,13 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
             newGenResource = newQuery;
             if (newQuery->m_NameLength == 0) {
                 delete newGenResource;
-                m_ResourcesParsed = true;
-                m_ResourcesParseResult = false;
-                return m_ResourcesParseResult;
+                return fail_parse();
             }
             // Verify the query record fits: name + 4 bytes (QTYPE + QCLASS).
             if (offsetInPacket > m_DataLen || newQuery->m_NameLength > m_DataLen - offsetInPacket
                 || m_DataLen - offsetInPacket - newQuery->m_NameLength < 4) {
                 delete newGenResource;
-                m_ResourcesParsed = true;
-                m_ResourcesParseResult = false;
-                return m_ResourcesParseResult;
+                return fail_parse();
             }
             offsetInPacket += newQuery->getSize();
         } else {
@@ -243,27 +242,26 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
                 || newResource->m_NameLength > m_DataLen - offsetInPacket
                 || m_DataLen - offsetInPacket - newResource->m_NameLength < 10) {
                 delete newGenResource;
-                m_ResourcesParsed = true;
-                m_ResourcesParseResult = false;
-                return m_ResourcesParseResult;
+                return fail_parse();
             }
             uint16_t rdataLen;
             memcpy(&rdataLen, m_Data + offsetInPacket + newResource->m_NameLength + 8, sizeof(rdataLen));
             size_t resourceSize = newResource->m_NameLength + 3 * sizeof(uint16_t) + sizeof(uint32_t) + be16toh(rdataLen);
             if (resourceSize < newResource->m_NameLength || offsetInPacket > m_DataLen - resourceSize) {
                 delete newGenResource;
-                m_ResourcesParsed = true;
-                m_ResourcesParseResult = false;
-                return m_ResourcesParseResult;
+                return fail_parse();
             }
             offsetInPacket += resourceSize;
         }
 
+        if (offsetInPacket <= prevOffsetInPacket) {
+            delete newGenResource;
+            return fail_parse();
+        }
+
         if (offsetInPacket > m_DataLen) {
             delete newGenResource;
-            m_ResourcesParsed = true;
-            m_ResourcesParseResult = false;
-            return m_ResourcesParseResult;
+            return fail_parse();
         }
 
         // this resource is the first resource
@@ -273,9 +271,7 @@ bool DnsLayer::parseResources(bool queryOnly, bool additionalOnly, bool forcePar
         } else {
             if (curResource == NULL) {
                 delete newGenResource;
-                m_ResourcesParsed = true;
-                m_ResourcesParseResult = false;
-                return m_ResourcesParseResult;
+                return fail_parse();
             }
             curResource->setNexResource(newGenResource);
             curResource = curResource->getNextResource();

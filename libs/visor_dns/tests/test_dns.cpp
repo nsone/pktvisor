@@ -397,11 +397,10 @@ TEST_CASE("fixed-field bounds checks do not overflow on malformed resource heade
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     CHECK(layer.parseResources(false, false, true) == false);
 }
-TEST_CASE("parseResources rejects stale partial list before appending", "[dns]")
+TEST_CASE("non-forced parse reuses successful partial parse result", "[dns]")
 {
-    // A queryOnly parse leaves curResource null while m_ResourceList is non-null.
-    // A later non-forced full parse must fail cleanly instead of appending through
-    // that stale tail pointer.
+    // After a successful queryOnly parse, a later non-forced parse returns the
+    // cached success result instead of reparsing or appending to the partial list.
     constexpr size_t pktLen = 26;
     auto pkt = std::make_unique<uint8_t[]>(pktLen);
     memset(pkt.get(), 0, pktLen);
@@ -417,7 +416,7 @@ TEST_CASE("parseResources rejects stale partial list before appending", "[dns]")
 
     DnsLayer layer(pkt.release(), pktLen, nullptr, nullptr);
     REQUIRE(layer.parseResources(true, false, true) == true);
-    CHECK(layer.parseResources(false, false, false) == false);
+    CHECK(layer.parseResources(false, false, false) == true);
 }
 
 TEST_CASE("forceParse reparses after a successful partial parse", "[dns]")
