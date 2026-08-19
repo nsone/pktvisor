@@ -350,24 +350,29 @@ std::basic_string_view<uint8_t> IDnsResource::getRawName() const
             // root label at the end
             pos += 1;
             break;
-        } else if (scan[pos] < 0xc0) {
-            // normal label: need the length byte plus all label bytes in bounds
-            size_t label_end = pos + 1 + scan[pos];
-            if (label_end >= scan.size()) {
-                return {};
-            }
-            pos = label_end;
-        } else if (scan[pos] == 0xc0) {
+        }
+
+        uint8_t label = scan[pos];
+        if ((label & 0xc0) == 0xc0) {
             // compression pointer: need one more byte
             if (pos + 2 > scan.size()) {
                 return {};
             }
             pos += 2;
             break;
-        } else {
+        }
+
+        if ((label & 0xc0) != 0x00) {
             // malformed name
             return {};
         }
+
+        // normal label: need the length byte plus all label bytes in bounds
+        size_t label_end = pos + 1 + label;
+        if (label_end >= scan.size()) {
+            return {};
+        }
+        pos = label_end;
     }
 
     if (pos > scan.size()) {
