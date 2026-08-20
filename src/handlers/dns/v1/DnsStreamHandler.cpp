@@ -491,7 +491,7 @@ inline void DnsStreamHandler::_register_predicate_filter(Filters filter, std::st
     if (filter == Filters::OnlyRCode) {
         // all DnsStreamHandler race to install this predicate, which is only installed once per thread and called once per udp event
         // it's job is to return the predicate "jump key" to call matching signals
-        static thread_local auto udp_rcode_predicate = [&cache = _cached_dns_layer](pcpp::Packet &payload, PacketDirection, pcpp::ProtocolType, uint32_t flowkey, timespec stamp) -> std::string {
+        static thread_local auto udp_rcode_predicate = [](pcpp::Packet &payload, PacketDirection, pcpp::ProtocolType, uint32_t, timespec) -> std::string {
             pcpp::UdpLayer *udpLayer = payload.getLayerOfType<pcpp::UdpLayer>();
             assert(udpLayer);
             DnsLayer dnsLayer(udpLayer, &payload);
