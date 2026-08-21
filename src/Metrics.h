@@ -818,6 +818,7 @@ class Rate final : public Metric
 {
     std::atomic_uint64_t _counter;
     std::atomic_uint64_t _rate;
+    std::atomic_bool _ticked{false};
     mutable std::shared_mutex _sketch_mutex;
     mutable Quantile<int_fast32_t> _quantile;
 
@@ -831,6 +832,7 @@ class Rate final : public Metric
         _timer_handle = timer_thread.set_interval(1s, [this] {
             // only update the atomic rate — quantile is updated lazily at scrape time
             _rate.store(_counter.exchange(0));
+            _ticked.store(true, std::memory_order_relaxed);
         });
     }
 
