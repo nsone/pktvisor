@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <mutex>
 #include <tuple>
@@ -99,11 +100,42 @@ public:
 
 			while(!m_tick_event.wait_until(start + m_tick * ++m_ticks))
 			{
-				// Collect due events while holding the lock, then dispatch them
-				// to the pool without holding the lock.  This keeps the lock
-				// hold time O(N) in list traversal only, not in callback cost.
+				// --- Phase 1: drain the lock-free pending queue into m_events.
+				// Callers push into m_pending_head with a single CAS (no lock held).
+				// We atomically take the whole chain here, then append under
+				// m_events_lock.  Lock hold time is O(new entries), not O(total).
+				{
+					// Atomically detach the pending chain.
+					event_ctx_node* chain = m_pending_head.exchange(nullptr, std::memory_order_acquire);
+
+					if (chain) {
+						// The chain is in LIFO order (newest first); reverse it so
+						// events fire in registration order (cosmetic, not required for correctness).
+						event_ctx_node* prev = nullptr;
+						event_ctx_node* cur  = chain;
+						while (cur) {
+							event_ctx_node* next = cur->next;
+							cur->next = prev;
+							prev = cur;
+							cur = next;
+						}
+						chain = prev;
+
+						std::scoped_lock lock{ m_events_lock };
+						while (chain) {
+							event_ctx_node* next = chain->next;
+							// Drop events that were cancelled before they ever reached m_events.
+							if (!chain->ctx->cancelled->wait_for(std::chrono::seconds{0})) {
+								m_events.push_back(std::move(chain->ctx));
+							}
+							delete chain;
+							chain = next;
+						}
+					}
+				}
+
+				// --- Phase 2: iterate m_events and collect due callbacks.
 				std::vector<event_ctx_ptr> due;
-				std::vector<event_ctx_ptr> to_remove;
 
 				{
 					std::scoped_lock lock{ m_events_lock };
@@ -136,7 +168,7 @@ public:
 					}
 				}
 
-				// Dispatch each due callback to the pool.
+				// --- Phase 3: dispatch each due callback to the pool.
 				for (auto& e : due) {
 					m_pool.post([e]() mutable {
 						// Re-check cancellation in the pool thread.
@@ -149,6 +181,14 @@ public:
 						e->signal_work();
 					});
 				}
+			}
+
+			// Timer is shutting down — drain and free any remaining pending nodes.
+			event_ctx_node* chain = m_pending_head.exchange(nullptr, std::memory_order_acquire);
+			while (chain) {
+				event_ctx_node* next = chain->next;
+				delete chain;
+				chain = next;
 			}
 		});
 	}
@@ -210,10 +250,7 @@ public:
 				return true;
 			});
 
-		{
-			std::scoped_lock lock{ m_events_lock };
-			m_events.push_back(ctx);
-		}
+		_push_pending(std::move(ctx));
 
 		return handle;
 	}
@@ -241,10 +278,7 @@ public:
 				return false;
 			});
 
-		{
-			std::scoped_lock lock{ m_events_lock };
-			m_events.push_back(ctx);
-		}
+		_push_pending(std::move(ctx));
 
 		return handle;
 	}
@@ -286,4 +320,36 @@ private:
 	using event_list = std::list<event_ctx_ptr>;
 	event_list m_events;
 	std::recursive_mutex m_events_lock;
+
+	// -------------------------------------------------------------------------
+	// Lock-free MPSC pending queue.
+	//
+	// Registrations from set_interval/set_timeout push a node onto this
+	// intrusive singly-linked stack with a single CAS — no lock, no blocking.
+	// The tick thread atomically swaps the head to nullptr once per tick and
+	// splices the chain into m_events under m_events_lock.  This keeps the
+	// HTTP thread (which calls set_interval for every Rate construction) from
+	// ever blocking on m_events_lock.
+	// -------------------------------------------------------------------------
+	struct event_ctx_node
+	{
+		event_ctx_ptr ctx;
+		event_ctx_node* next{nullptr};
+		explicit event_ctx_node(event_ctx_ptr c) : ctx(std::move(c)) {}
+	};
+
+	std::atomic<event_ctx_node*> m_pending_head{nullptr};
+
+	void _push_pending(event_ctx_ptr ctx)
+	{
+		auto* node = new event_ctx_node(std::move(ctx));
+		// CAS loop: atomically prepend node to the stack.
+		event_ctx_node* head = m_pending_head.load(std::memory_order_relaxed);
+		do {
+			node->next = head;
+		} while (!m_pending_head.compare_exchange_weak(
+			head, node,
+			std::memory_order_release,
+			std::memory_order_relaxed));
+	}
 };
