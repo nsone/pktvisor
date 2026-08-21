@@ -118,7 +118,9 @@ void PcapInputEventProxy::start_dispatch(PcapInputStream *stream)
                     false, pcpp::LINKTYPE_ETHERNET);
                 _input_stream->process_raw_packet(&raw);
             } else {
-                std::this_thread::yield();
+                // Sleep briefly instead of spinning so idle dispatch threads
+                // do not saturate CPU when the queue is empty.
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         }
     });
