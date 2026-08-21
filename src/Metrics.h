@@ -819,7 +819,7 @@ class Rate final : public Metric
     std::atomic_uint64_t _counter;
     std::atomic_uint64_t _rate;
     mutable std::shared_mutex _sketch_mutex;
-    Quantile<int_fast32_t> _quantile;
+    mutable Quantile<int_fast32_t> _quantile;
 
     std::shared_ptr<timer::interval_handle> _timer_handle;
 
