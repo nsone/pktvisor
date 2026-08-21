@@ -829,10 +829,8 @@ class Rate final : public Metric
         // the tick argument determines the granularity of job running and canceling
         static timer timer_thread{100ms};
         _timer_handle = timer_thread.set_interval(1s, [this] {
+            // only update the atomic rate — quantile is updated lazily at scrape time
             _rate.store(_counter.exchange(0));
-            // lock mutex for write
-            std::unique_lock lock(_sketch_mutex);
-            _quantile.update(_rate);
         });
     }
 
@@ -859,7 +857,6 @@ public:
     {
         _timer_handle->cancel();
         _timer_handle->wait_for(100ms); // drain in-flight
-        std::unique_lock w_lock(_sketch_mutex);
         _rate.store(0, std::memory_order_relaxed);
         _counter.store(0, std::memory_order_relaxed);
     }

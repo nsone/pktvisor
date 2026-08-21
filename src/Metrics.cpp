@@ -45,19 +45,24 @@ void Rate::to_json(json &j, bool include_live) const
 
 void Rate::to_json(visor::json &j) const
 {
-    std::shared_lock lock(_sketch_mutex);
+    // Update the quantile sketch lazily at scrape time so the timer callback
+    // stays lock-free (Option A: compute-on-read).
+    std::unique_lock lock(_sketch_mutex);
+    _quantile.update(static_cast<int_fast32_t>(_rate.load(std::memory_order_relaxed)));
     _quantile.to_json(j);
 }
 
 void Rate::to_prometheus(std::stringstream &out, Metric::LabelMap add_labels) const
 {
-    std::shared_lock lock(_sketch_mutex);
+    std::unique_lock lock(_sketch_mutex);
+    _quantile.update(static_cast<int_fast32_t>(_rate.load(std::memory_order_relaxed)));
     _quantile.to_prometheus(out, add_labels);
 }
 
 void Rate::to_opentelemetry(metrics::v1::ScopeMetrics &scope, timespec &start, timespec &end, Metric::LabelMap add_labels) const
 {
-    std::shared_lock lock(_sketch_mutex);
+    std::unique_lock lock(_sketch_mutex);
+    _quantile.update(static_cast<int_fast32_t>(_rate.load(std::memory_order_relaxed)));
     _quantile.to_opentelemetry(scope, start, end, add_labels);
 }
 
