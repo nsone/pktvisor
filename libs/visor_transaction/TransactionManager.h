@@ -5,8 +5,6 @@
 #pragma once
 
 #include "robin_hood.h"
-#include <chrono>
-#include <memory>
 
 namespace visor::lib::transaction {
 
@@ -101,6 +99,10 @@ public:
         }
         for (auto i : timed_out) {
             _transactions.erase(i);
+        }
+        // If the map shrank to less than 25% of its pre-purge size, shrink-to-fit
+        if (!timed_out.empty() && _transactions.size() * 4 < timed_out.size()) {
+            _transactions.rehash(0);
         }
         return timed_out.size();
     }

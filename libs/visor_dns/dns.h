@@ -4,9 +4,6 @@
 
 #pragma once
 
-#include "DnsLayer.h"
-#include "DnsResource.h"
-#include "DnsResourceData.h"
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -28,7 +25,7 @@ enum RCode {
     Refused = 5
 };
 
-static std::unordered_map<uint16_t, std::string> QTypeNames({
+inline std::unordered_map<uint16_t, std::string> QTypeNames({
     {0, "Reserved (0)"},
     {1, "A"},
     {2, "NS"},
@@ -122,7 +119,7 @@ static std::unordered_map<uint16_t, std::string> QTypeNames({
     {65535, "Reserved (65535)"},
 });
 
-static std::unordered_map<std::string, uint16_t> QTypeNumbers({
+inline std::unordered_map<std::string, uint16_t> QTypeNumbers({
     {"Reserved (0)", 0},
     {"A", 1},
     {"NS", 2},
@@ -216,7 +213,7 @@ static std::unordered_map<std::string, uint16_t> QTypeNumbers({
     {"Reserved (65535)", 65535},
 });
 
-static std::unordered_map<uint16_t, std::string> RCodeNames({
+inline std::unordered_map<uint16_t, std::string> RCodeNames({
     {0, "NOERROR"},
     {1, "FORMERR"},
     {2, "SRVFAIL"},
@@ -240,7 +237,7 @@ static std::unordered_map<uint16_t, std::string> RCodeNames({
     {23, "BADCOOKIE"},
 });
 
-static std::unordered_map<std::string, uint16_t> RCodeNumbers({
+inline std::unordered_map<std::string, uint16_t> RCodeNumbers({
     {"NOERROR", 0},
     {"FORMERR", 1},
     {"SRVFAIL", 2},

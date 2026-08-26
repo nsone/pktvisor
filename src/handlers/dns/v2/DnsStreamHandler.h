@@ -5,16 +5,15 @@
 #pragma once
 
 #include "AbstractMetricsManager.h"
+#include "DnsLayer.h"
 #include "DnstapInputStream.h"
 #include "GeoDB.h"
 #include "MockInputStream.h"
 #include "PcapInputStream.h"
 #include "StreamHandler.h"
 #include "TransactionManager.h"
-#include "dns.h"
 #include <Corrade/Utility/Debug.h>
 #include <bitset>
-#include <limits>
 #include <string>
 
 namespace visor::input::dnstap {

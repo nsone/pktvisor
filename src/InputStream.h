@@ -17,7 +17,7 @@ class InputStream : public AbstractRunnableModule
 
 protected:
     typedef std::vector<std::string> ConfigsDefType;
-    static constexpr uint8_t HEARTBEAT_INTERVAL = 30; // in seconds
+    static constexpr uint8_t HEARTBEAT_INTERVAL = 4; // in seconds
     mutable std::shared_mutex _input_mutex;
     std::vector<std::unique_ptr<InputEventProxy>> _event_proxies;
 

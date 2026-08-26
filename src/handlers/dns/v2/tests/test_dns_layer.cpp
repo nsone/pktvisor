@@ -3,6 +3,7 @@
 #include <catch2/catch_test_visor.hpp>
 
 #include "DnsStreamHandler.h"
+#include "dns.h"
 #include "GeoDB.h"
 #include "PcapInputStream.h"
 #ifdef __GNUC__

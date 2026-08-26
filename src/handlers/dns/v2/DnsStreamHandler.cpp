@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #include "DnsStreamHandler.h"
+#include "dns.h"
 #include "HandlerModulePlugin.h"
 #include <Corrade/Utility/Debug.h>
 #ifdef __GNUC__
