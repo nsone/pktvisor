@@ -654,6 +654,7 @@ int main(int argc, char *argv[])
         otel_config.path = options.otel_setup.path.value();
         otel_config.endpoint = options.otel_setup.host.value();
         otel_config.port_number = options.otel_setup.port.value();
+        otel_config.interval_sec = options.otel_setup.interval.value();
     }
 
     std::unique_ptr<CoreServer> svr;

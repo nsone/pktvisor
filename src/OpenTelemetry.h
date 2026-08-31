@@ -5,6 +5,7 @@
 #pragma once
 
 #include "HttpServer.h"
+#include <atomic>
 #include <functional>
 #include <timer.hpp>
 #ifdef __GNUC__
@@ -37,8 +38,10 @@ struct OtelConfig {
 class OpenTelemetry
 {
     std::unique_ptr<httplib::Client> _client;
-    collector::metrics::v1::ExportMetricsServiceRequest _request;
-    metrics::v1::ResourceMetrics *_resource;
+    // _in_flight prevents concurrent exports when a slow tick overlaps the next
+    // interval fired by the thread-pool timer.  test_and_set returns false only
+    // for the first caller; subsequent ticks see true and skip.
+    std::atomic_flag _in_flight = ATOMIC_FLAG_INIT;
     timer _timer_thread;
     std::shared_ptr<timer::interval_handle> _timer_handle;
     std::function<bool(metrics::v1::ResourceMetrics &resource)> _callback;
@@ -52,25 +55,30 @@ public:
         } else {
             _client = std::make_unique<httplib::Client>(config.endpoint, config.port_number);
         }
-        _resource = _request.add_resource_metrics();
         auto path = config.path;
         _timer_handle = _timer_thread.set_interval(std::chrono::seconds(config.interval_sec), [path, this] {
-            _resource->clear_scope_metrics();
-            if (_callback && _callback(*_resource)) {
-                if (auto body_size = _request.ByteSizeLong(); body_size > sizeof(_request)) {
+            // Skip this tick if the previous export is still running.
+            if (_in_flight.test_and_set(std::memory_order_acquire)) {
+                return;
+            }
+            // Build a fresh request each tick so there is no shared mutable
+            // protobuf state between concurrent (or sequential) callbacks.
+            collector::metrics::v1::ExportMetricsServiceRequest request;
+            auto *resource = request.add_resource_metrics();
+            if (_callback && _callback(*resource)) {
+                if (auto body_size = request.ByteSizeLong(); body_size > sizeof(request)) {
                     auto body = std::make_unique<char[]>(body_size);
-                    _request.SerializeToArray(body.get(), body_size);
-                    auto result = _client->Post(path, body.get(), body_size, BIN_CONTENT_TYPE);
+                    request.SerializeToArray(body.get(), body_size);
+                    _client->Post(path, body.get(), body_size, BIN_CONTENT_TYPE);
                 }
             }
+            _in_flight.clear(std::memory_order_release);
         });
     }
 
     ~OpenTelemetry()
     {
         _timer_handle->cancel();
-        _resource->clear_resource();
-        _resource = nullptr;
     }
 
     void OnInterval(std::function<bool(metrics::v1::ResourceMetrics &resource)> callback)
