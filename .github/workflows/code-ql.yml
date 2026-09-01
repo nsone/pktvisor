@@ -2,6 +2,12 @@
 name: "CodeQL"
 
 on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+  schedule:
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -39,13 +45,6 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: 'cpp'
-        # If you wish to specify custom queries, you can do so here or in a config file.
-        # By default, queries listed here will override any specified in a config file.
-        # Prefix the list here with "+" to use these queries and those in the config file.
-        
-        # Details on CodeQL's query packs refer to : https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
-        # queries: security-extended,security-and-quality
-        queries: ./.github/codeql/security.qls
         config-file: ./.github/codeql/config.yml
         
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
@@ -60,18 +59,10 @@ jobs:
     #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
 
     - run: |
-        # Run Build - set up dependencies, env vars, compile, and make test
-        #install conan
         pip install --no-cache-dir conan --force-reinstall
-        # clone the repository, not sure if this needs to be done
-        git clone https://github.com/netboxlabs/pktvisor.git
-        cd pktvisor
         mkdir build && cd build
-        # configure and handle dependencies
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake ..
-        # build and run tests
         sudo make all test
-        #remove conan files
         rm -rf p/
 
     - name: Perform CodeQL Analysis
@@ -79,7 +70,7 @@ jobs:
       with:
         category: "/language:cpp"
         output: sarif-results
-        upload: failure-only
+        upload: always
 
     - name: filter-sarif
       uses: advanced-security/filter-sarif@v1

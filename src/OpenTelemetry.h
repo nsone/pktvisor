@@ -5,8 +5,8 @@
 #pragma once
 
 #include "HttpServer.h"
-#include <atomic>
 #include <functional>
+#include <mutex>
 #include <timer.hpp>
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -38,10 +38,8 @@ struct OtelConfig {
 class OpenTelemetry
 {
     std::unique_ptr<httplib::Client> _client;
-    // _in_flight prevents concurrent exports when a slow tick overlaps the next
-    // interval fired by the thread-pool timer.  test_and_set returns false only
-    // for the first caller; subsequent ticks see true and skip.
-    std::atomic_flag _in_flight = ATOMIC_FLAG_INIT;
+    // Serialises concurrent ticks: late tick waits up to interval/2 rather than discarding its window.
+    std::timed_mutex _export_mutex;
     timer _timer_thread;
     std::shared_ptr<timer::interval_handle> _timer_handle;
     std::function<bool(metrics::v1::ResourceMetrics &resource)> _callback;
@@ -55,14 +53,20 @@ public:
         } else {
             _client = std::make_unique<httplib::Client>(config.endpoint, config.port_number);
         }
+        // Cap HTTP timeouts to interval/2 so a hung receiver cannot starve the bucket retention window.
+        auto timeout = std::chrono::seconds(config.interval_sec / 2);
+        auto timeout_sec = static_cast<time_t>(timeout.count());
+        _client->set_connection_timeout(timeout_sec);
+        _client->set_read_timeout(timeout_sec);
+        _client->set_write_timeout(timeout_sec);
         auto path = config.path;
-        _timer_handle = _timer_thread.set_interval(std::chrono::seconds(config.interval_sec), [path, this] {
-            // Skip this tick if the previous export is still running.
-            if (_in_flight.test_and_set(std::memory_order_acquire)) {
+        _timer_handle = _timer_thread.set_interval(std::chrono::seconds(config.interval_sec), [path, timeout, this] {
+            // Wait for any in-progress export; drop this tick only if the wait exceeds interval/2 (broken receiver).
+            std::unique_lock<std::timed_mutex> lock(_export_mutex, timeout);
+            if (!lock.owns_lock()) {
                 return;
             }
-            // Build a fresh request each tick so there is no shared mutable
-            // protobuf state between concurrent (or sequential) callbacks.
+            // Fresh request each tick: no shared mutable protobuf state between ticks.
             collector::metrics::v1::ExportMetricsServiceRequest request;
             auto *resource = request.add_resource_metrics();
             if (_callback && _callback(*resource)) {
@@ -72,7 +76,6 @@ public:
                     _client->Post(path, body.get(), body_size, BIN_CONTENT_TYPE);
                 }
             }
-            _in_flight.clear(std::memory_order_release);
         });
     }
 
