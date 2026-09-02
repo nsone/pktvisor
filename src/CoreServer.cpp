@@ -447,18 +447,19 @@ void CoreServer::_setup_routes(const PrometheusConfig &prom_config)
     });
     if (_otel) {
         _otel->OnInterval([&](metrics::v1::ResourceMetrics &resource) {
-            for (const auto &p_mname : _registry->policy_manager()->module_get_keys()) {
-                try {
-                    auto [policy, lock] = _registry->policy_manager()->module_get_locked(p_mname);
+            // Hold _map_mutex for the full iteration; prevents a policy replace between locks producing a mismatched policy_name/datapoint scope.
+            try {
+                auto [map, lock] = _registry->policy_manager()->module_get_all_locked();
+                for (const auto &[p_mname, policy] : map) {
                     auto scope = resource.add_scope_metrics();
                     scope->mutable_scope()->set_name("pktvisor/" + p_mname);
                     auto attr = scope->mutable_scope()->add_attributes();
                     attr->set_key("policy_name");
                     attr->mutable_value()->set_string_value(p_mname);
                     policy->opentelemetry_metrics(*scope);
-                } catch (const std::exception &) {
-                    return false;
                 }
+            } catch (const std::exception &) {
+                return false;
             }
             return true;
         });
