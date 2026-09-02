@@ -5,6 +5,7 @@
 #include "PcapInputStream.h"
 #include "NetworkInterfaceScan.h"
 #include "ThreadName.h"
+#include <atomic>
 #include <pcap.h>
 #include <timer.hpp>
 #ifdef __GNUC__
@@ -565,16 +566,15 @@ void PcapInputStream::_open_pcap(const std::string &fileName, const std::string 
         process_raw_packet(&rawPacket);
     }
 
-    int packetCount = 1, lastCount = 0;
+    std::atomic_int packetCount{1}, lastCount{0};
     timer t(100ms);
     auto t0 = t.set_interval(1s, [&packetCount, &lastCount]() {
-        std::cerr << "processed " << packetCount << " packets (" << lastCount << "/s)\n";
-        lastCount = 0;
+        std::cerr << "processed " << packetCount << " packets (" << lastCount.exchange(0) << "/s)\n";
     });
     while (_running && reader->getNextPacket(rawPacket)) {
         process_raw_packet(&rawPacket);
-        packetCount++;
-        lastCount++;
+        ++packetCount;
+        ++lastCount;
         end_tstamp = rawPacket.getPacketTimeStamp();
     }
     std::shared_lock lock(_input_mutex);
