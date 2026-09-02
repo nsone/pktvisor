@@ -106,16 +106,23 @@ void FlowInputStream::_read_from_pcap_file()
                 NFSample sample;
                 sample.raw_sample = udpLayer->getLayerPayload();
                 sample.raw_sample_len = udpLayer->getLayerPayloadSize();
+                // Extract the exporter's address and port before parsing
+                // (not just for the callback below) -- process_netflow_packet
+                // uses them (plus this stream's own listener_id) as part of
+                // the template-map key, so two different exporters replayed
+                // from the same pcap -- or through the same listener as
+                // another configured tap -- can't collide.
+                if (auto IP4layer = netflow_pkt.getLayerOfType<pcpp::IPv4Layer>(); IP4layer) {
+                    sample.exporter_ip = IP4layer->getSrcIPv4Address().toString();
+                } else if (auto IP6layer = netflow_pkt.getLayerOfType<pcpp::IPv6Layer>(); IP6layer) {
+                    sample.exporter_ip = IP6layer->getSrcIPv6Address().toString();
+                }
+                sample.listener_id = _name;
+                sample.exporter_port = udpLayer->getSrcPort();
                 if (process_netflow_packet(&sample)) {
-                    std::string src_ip;
-                    if (auto IP4layer = netflow_pkt.getLayerOfType<pcpp::IPv4Layer>(); IP4layer) {
-                        src_ip = IP4layer->getSrcIPv4Address().toString();
-                    } else if (auto IP6layer = netflow_pkt.getLayerOfType<pcpp::IPv6Layer>(); IP6layer) {
-                        src_ip = IP6layer->getSrcIPv6Address().toString();
-                    }
                     std::shared_lock lock(_input_mutex);
                     for (auto &proxy : _event_proxies) {
-                        static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(src_ip, sample, rawPacket.getRawDataLen());
+                        static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(sample.exporter_ip, sample, rawPacket.getRawDataLen());
                     }
                 } else {
                     _logger->error("invalid netflow or ipfix packet");
@@ -143,12 +150,15 @@ void FlowInputStream::_create_frame_stream_udp_socket()
         throw FlowException("unable to initialize AsyncHandle");
     }
     _async_h->on<uvw::async_event>([this](const auto &, auto &handle) {
+        // Stop and close the handles, then stop the loop so uv_run() returns.
+        // Do NOT close the loop here: uv_loop_close() while uv_run() is still on
+        // the stack frees structures that uv__io_poll keeps using, crashing with
+        // SIGSEGV/SIGBUS. The loop is closed in the io thread after run() returns.
         _timer->stop();
         _timer->close();
         _udp_server_h->stop();
         _udp_server_h->close();
         _io_loop->stop();
-        _io_loop->close();
         handle.close();
     });
     _async_h->on<uvw::error_event>([this](const auto &err, auto &handle) {
@@ -210,6 +220,15 @@ void FlowInputStream::_create_frame_stream_udp_socket()
             NFSample sample;
             sample.raw_sample = reinterpret_cast<uint8_t *>(event.data.get());
             sample.raw_sample_len = event.length;
+            // See the equivalent note in the pcap-file path above: fold in
+            // this stream's own identity and the exporter's UDP source port,
+            // in addition to its address, so two independently configured
+            // taps in the same process (or two exporters behind the same
+            // NAT'd address) can't collide in the process-global template
+            // maps.
+            sample.exporter_ip = event.sender.ip;
+            sample.listener_id = _name;
+            sample.exporter_port = static_cast<uint16_t>(event.sender.port);
             if (process_netflow_packet(&sample)) {
                 std::shared_lock lock(_input_mutex);
                 for (auto &proxy : _event_proxies) {
@@ -230,6 +249,8 @@ void FlowInputStream::_create_frame_stream_udp_socket()
         _timer->start(uvw::timer_handle::time{1000}, uvw::timer_handle::time{HEARTBEAT_INTERVAL * 1000});
         thread::change_self_name(schema_key(), name());
         _io_loop->run();
+        // run() has returned and every handle is closed; safe to close the loop.
+        _io_loop->close();
     });
 }
 
