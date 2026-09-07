@@ -120,9 +120,11 @@ void FlowInputStream::_read_from_pcap_file()
                 sample.listener_id = _name;
                 sample.exporter_port = udpLayer->getSrcPort();
                 if (process_netflow_packet(&sample)) {
-                    std::shared_lock lock(_input_mutex);
-                    for (auto &proxy : _event_proxies) {
-                        static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(sample.exporter_ip, sample, rawPacket.getRawDataLen());
+                    if (!sample.flows.empty()) {
+                        std::shared_lock lock(_input_mutex);
+                        for (auto &proxy : _event_proxies) {
+                            static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(sample.exporter_ip, sample, rawPacket.getRawDataLen());
+                        }
                     }
                 } else {
                     _logger->error("invalid netflow or ipfix packet");
@@ -230,9 +232,11 @@ void FlowInputStream::_create_frame_stream_udp_socket()
             sample.listener_id = _name;
             sample.exporter_port = static_cast<uint16_t>(event.sender.port);
             if (process_netflow_packet(&sample)) {
-                std::shared_lock lock(_input_mutex);
-                for (auto &proxy : _event_proxies) {
-                    static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(event.sender.ip, sample, event.length);
+                if (!sample.flows.empty()) {
+                    std::shared_lock lock(_input_mutex);
+                    for (auto &proxy : _event_proxies) {
+                        static_cast<FlowInputEventProxy *>(proxy.get())->netflow_cb(event.sender.ip, sample, event.length);
+                    }
                 }
             } else {
                 ++_error_count;

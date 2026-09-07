@@ -25,6 +25,7 @@ jobs:
     env:
       CC: gcc
       CXX: g++
+      CTEST_OUTPUT_ON_FAILURE: 1
 
     steps:
     - name: Checkout repository
@@ -62,7 +63,8 @@ jobs:
         pip install --no-cache-dir conan --force-reinstall
         mkdir build && cd build
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake ..
-        sudo make all test
+        sudo make all
+        sudo ctest --output-on-failure
         rm -rf p/
 
     - name: Perform CodeQL Analysis
